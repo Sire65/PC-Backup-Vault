@@ -1,0 +1,12 @@
+PC Backup Vault 1.7.3
+=====================
+
+KC Kommunikation / E-Mail
+- Provider-neutral aufgebaut: Backup Vault kennt keinen fest verdrahteten E-Mail-Anbieter mehr.
+- Aktiver E-Mail-Provider wird dynamisch von KC Communication geliefert.
+- Aktuell: Brevo produktiv.
+- Ein späterer Wechsel auf Resend oder einen anderen Provider benötigt keine Umbenennung in PC Backup Vault.
+- Status zeigt dynamisch z. B. „E-Mail: Brevo · produktiv“.
+- Versanddiagnose zeigt den tatsächlich verwendeten Provider.
+- E-Mail-Test bleibt bewusst neutral „E-Mail testen“.
+- Ein-Zeilen-Sicherungsleiste beibehalten.
