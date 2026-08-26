@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/materialize-source.yml"
+      - ".bootstrap/**"
   workflow_dispatch:
 
 permissions:
