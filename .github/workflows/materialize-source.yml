@@ -28,16 +28,29 @@ jobs:
             Write-Host "Bootstrap bereits entfernt; nichts zu tun."
             exit 0
           }
-          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          $segments = foreach ($part in $parts) {
+            $raw = Get-Content $part.FullName -Raw
+            $clean = $raw -replace '[^A-Za-z0-9+/=]', ''
+            Write-Host "$($part.Name): raw=$($raw.Length) clean=$($clean.Length)"
+            $clean
+          }
+          $b64 = $segments -join ''
+          while (($b64.Length % 4) -ne 0) { $b64 += '=' }
           [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash "source.zip" -Algorithm SHA256).Hash.ToLower()
+          Write-Host "source.zip SHA256=$hash"
           New-Item -ItemType Directory -Force -Path "_source" | Out-Null
           Expand-Archive -Path "source.zip" -DestinationPath "_source" -Force
+          $count = (Get-ChildItem "_source" -File -Recurse).Count
+          Write-Host "Extrahierte Dateien: $count"
+          if ($count -lt 50) { throw "Quellpaket unvollstaendig: nur $count Dateien" }
           Get-ChildItem "_source" -Force | ForEach-Object {
             Copy-Item $_.FullName -Destination "." -Recurse -Force
           }
           Remove-Item "source.zip" -Force
           Remove-Item "_source" -Recurse -Force
           Remove-Item ".bootstrap" -Recurse -Force
+          Remove-Item ".fix" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item ".upload_marker" -Force -ErrorAction SilentlyContinue
 
       - name: Quellstand committen
