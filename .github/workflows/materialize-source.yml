@@ -1,0 +1,53 @@
+name: Vollstaendigen 1.7.3 Quellstand herstellen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/materialize-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: windows-latest
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Vollstaendigen Quellstand aus Bootstrap herstellen
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem ".bootstrap/part*" -ErrorAction SilentlyContinue | Sort-Object Name
+          if (-not $parts) {
+            Write-Host "Bootstrap bereits entfernt; nichts zu tun."
+            exit 0
+          }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ''
+          [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
+          New-Item -ItemType Directory -Force -Path "_source" | Out-Null
+          Expand-Archive -Path "source.zip" -DestinationPath "_source" -Force
+          Get-ChildItem "_source" -Force | ForEach-Object {
+            Copy-Item $_.FullName -Destination "." -Recurse -Force
+          }
+          Remove-Item "source.zip" -Force
+          Remove-Item "_source" -Recurse -Force
+          Remove-Item ".bootstrap" -Recurse -Force
+          Remove-Item ".upload_marker" -Force -ErrorAction SilentlyContinue
+
+      - name: Quellstand committen
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if (git diff --cached --quiet) {
+            Write-Host "Keine Aenderungen."
+            exit 0
+          }
+          git commit -m "Materialize complete PC Backup Vault 1.7.3 source"
+          git push
