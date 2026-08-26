@@ -1,10 +1,6 @@
 name: Vollstaendigen 1.7.3 Quellstand herstellen
 
 on:
-  push:
-    branches: [import-1.7.3-clean]
-    paths:
-      - ".github/workflows/materialize-source.yml"
   workflow_dispatch:
 
 permissions:
@@ -14,50 +10,4 @@ jobs:
   materialize:
     runs-on: windows-latest
     steps:
-      - name: Repository laden
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Bootstrap rekonstruieren und Quellstand pruefen
-        shell: pwsh
-        run: |
-          $parts = Get-ChildItem ".bootstrap/part*" | Sort-Object Name
-          if ($parts.Count -eq 0) { throw "Bootstrap-Teile fehlen" }
-          $zip = "pc_backup_vault_source.zip"
-          $out = [IO.File]::Create($zip)
-          try {
-            foreach ($part in $parts) {
-              $text = (Get-Content $part.FullName -Raw).Trim()
-              $bytes = [Convert]::FromBase64String($text)
-              $out.Write($bytes, 0, $bytes.Length)
-            }
-          } finally { $out.Dispose() }
-          Remove-Item "_source" -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive -Path $zip -DestinationPath "_source" -Force
-          $files = Get-ChildItem "_source" -File -Recurse
-          Write-Host "Extrahierte Dateien: $($files.Count)"
-          if ($files.Count -lt 59) { throw "Quellpaket unvollstaendig: erwartet mindestens 59, gefunden $($files.Count)" }
-          $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
-          foreach ($name in $required) { if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" } }
-          $versionText = Get-Content "_source/NEU_IN_VERSION_1.7.3.txt" -Raw
-          if ($versionText -notmatch "1\.7\.3") { throw "Versionsnachweis 1.7.3 fehlt" }
-          Get-ChildItem "_source" -Force | ForEach-Object { Copy-Item $_.FullName -Destination "." -Recurse -Force }
-          (Get-Content "config_store.py" -Raw) -replace 'APP_VERSION\s*=\s*"1\.7\.2"','APP_VERSION = "1.7.3"' | Set-Content "config_store.py" -Encoding UTF8
-          Remove-Item "_source" -Recurse -Force
-          Remove-Item $zip -Force
-          Remove-Item ".bootstrap" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".fix" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".exact_source" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".source_upload" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".source" -Recurse -Force -ErrorAction SilentlyContinue
-
-      - name: Quellstand committen
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if (git diff --cached --quiet) { Write-Host "Keine Aenderungen."; exit 0 }
-          git commit -m "Materialize PC Backup Vault 1.7.3 source"
-          git push
+      - run: echo "Direktimport aktiv; kein Bootstrap-Import mehr."
