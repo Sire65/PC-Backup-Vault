@@ -45,6 +45,9 @@ jobs:
             $b64 += $segment
           }
           if ($b64 -match '[^A-Za-z0-9+/=]') { throw "Nicht-Base64-Zeichen in Segmentdaten gefunden" }
+          $b64 = $b64 -replace '=',''
+          while (($b64.Length % 4) -ne 0) { $b64 += '=' }
+          Write-Host "Normalisierte Base64-Laenge=$($b64.Length)"
           $zip = "pc_backup_vault_1.7.3_source_clean.zip"
           [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
           $expectedHash = "7224d7cf3aacc104036d9aec70f236a03cac6d7a56328c3911d186314e4dfc62"
