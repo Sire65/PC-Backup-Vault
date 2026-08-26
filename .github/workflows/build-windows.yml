@@ -1,4 +1,4 @@
-name: Windows EXE bauen
+name: Windows EXE und Setup bauen
 
 on:
   workflow_dispatch:
@@ -9,6 +9,7 @@ on:
       - "requirements.txt"
       - "schema.sql"
       - "BUILD_EXE.bat"
+      - "installer/**"
       - ".github/workflows/build-windows.yml"
 
 jobs:
@@ -36,15 +37,33 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
 
-      - name: Windows-Paket als ZIP erstellen
+      - name: Portables Windows-Paket erstellen
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.7.3_Windows.zip" -Force
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.7.3_Windows_Portable.zip" -Force
 
-      - name: Windows-Paket bereitstellen
+      - name: Inno Setup installieren
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Windows Setup bauen
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
+          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.7.3_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
+
+      - name: Windows Installer bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.7.3_Windows
-          path: PC_Backup_Vault_1.7.3_Windows.zip
+          name: PC_Backup_Vault_1.7.3_Setup
+          path: installer/output/PC_Backup_Vault_1.7.3_Setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Portable Version bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC_Backup_Vault_1.7.3_Windows_Portable
+          path: PC_Backup_Vault_1.7.3_Windows_Portable.zip
           if-no-files-found: error
           retention-days: 30
