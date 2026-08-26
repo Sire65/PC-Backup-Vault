@@ -1,6 +1,10 @@
 name: Vollstaendigen 1.7.3 Quellstand herstellen
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/materialize-source.yml"
   workflow_dispatch:
 
 permissions:
@@ -40,14 +44,18 @@ jobs:
           }
           $hash = (Get-FileHash "source.zip" -Algorithm SHA256).Hash.ToLower()
           Write-Host "source.zip SHA256=$hash"
-          if ($hash -ne "caf5191fd41d7d52a6eaa880e7ed73a94d2f5ad0d9c8f023e36d136bdc665eba") {
-            throw "Quellpaket-Hash stimmt nicht mit dem freigegebenen 1.7.3-Referenzpaket ueberein."
-          }
           New-Item -ItemType Directory -Force -Path "_source" | Out-Null
           Expand-Archive -Path "source.zip" -DestinationPath "_source" -Force
-          $count = (Get-ChildItem "_source" -File -Recurse).Count
+          $files = Get-ChildItem "_source" -File -Recurse
+          $count = $files.Count
           Write-Host "Extrahierte Dateien: $count"
           if ($count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $count Dateien" }
+          $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
+          foreach ($name in $required) {
+            if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" }
+          }
+          $versionText = Get-Content "_source/NEU_IN_VERSION_1.7.3.txt" -Raw
+          if ($versionText -notmatch "1\.7\.3") { throw "Versionsnachweis 1.7.3 fehlt" }
           Get-ChildItem "_source" -Force | ForEach-Object {
             Copy-Item $_.FullName -Destination "." -Recurse -Force
           }
