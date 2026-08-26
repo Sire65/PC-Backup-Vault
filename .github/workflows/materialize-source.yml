@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".source/pc_backup_vault_1.7.3_source.zip"
       - ".github/workflows/materialize-source.yml"
   workflow_dispatch:
 
@@ -19,37 +20,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Vollstaendigen Quellstand aus Bootstrap herstellen
+      - name: Archiv pruefen und Quellstand herstellen
         shell: pwsh
         run: |
-          $parts = Get-ChildItem ".bootstrap/part*" -ErrorAction SilentlyContinue | Sort-Object Name
-          if (-not $parts) {
-            Write-Host "Bootstrap bereits entfernt; nichts zu tun."
-            exit 0
-          }
-          $out = [System.IO.File]::Open("source.zip", [System.IO.FileMode]::Create)
-          try {
-            foreach ($part in $parts) {
-              $raw = Get-Content $part.FullName -Raw
-              $clean = $raw -replace '[^A-Za-z0-9+/=]', ''
-              $clean = $clean.TrimEnd('=')
-              while (($clean.Length % 4) -ne 0) { $clean += '=' }
-              $bytes = [Convert]::FromBase64String($clean)
-              $out.Write($bytes, 0, $bytes.Length)
-              Write-Host "$($part.Name): $($bytes.Length) Bytes decodiert"
-            }
-          }
-          finally {
-            $out.Dispose()
-          }
-          $hash = (Get-FileHash "source.zip" -Algorithm SHA256).Hash.ToLower()
-          Write-Host "source.zip SHA256=$hash"
+          $zip = ".source/pc_backup_vault_1.7.3_source.zip"
+          if (-not (Test-Path $zip)) { throw "Quellarchiv fehlt: $zip" }
+          $expectedHash = "caf5191fd41d7d52a6eaa880e7ed73a94d2f5ad0d9c8f023e36d136bdc665eba"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Write-Host "SHA256=$hash"
+          if ($hash -ne $expectedHash) { throw "SHA256 stimmt nicht mit dem Referenzpaket ueberein" }
+          Remove-Item "_source" -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "_source" | Out-Null
-          Expand-Archive -Path "source.zip" -DestinationPath "_source" -Force
+          Expand-Archive -Path $zip -DestinationPath "_source" -Force
           $files = Get-ChildItem "_source" -File -Recurse
           $count = $files.Count
           Write-Host "Extrahierte Dateien: $count"
-          if ($count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $count Dateien" }
+          if ($count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $count" }
           $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
           foreach ($name in $required) {
             if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" }
@@ -59,10 +45,10 @@ jobs:
           Get-ChildItem "_source" -Force | ForEach-Object {
             Copy-Item $_.FullName -Destination "." -Recurse -Force
           }
-          Remove-Item "source.zip" -Force
           Remove-Item "_source" -Recurse -Force
-          Remove-Item ".bootstrap" -Recurse -Force
+          Remove-Item ".bootstrap" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item ".fix" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".source_parts" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item ".upload_marker" -Force -ErrorAction SilentlyContinue
 
       - name: Quellstand committen
@@ -75,5 +61,5 @@ jobs:
             Write-Host "Keine Aenderungen."
             exit 0
           }
-          git commit -m "Materialize complete PC Backup Vault 1.7.3 source"
+          git commit -m "Materialize verified PC Backup Vault 1.7.3 source"
           git push
