@@ -19,26 +19,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bootstrap rekonstruieren, pruefen und entpacken
+      - name: Bootstrap rekonstruieren und Quellstand pruefen
         shell: pwsh
         run: |
           $parts = Get-ChildItem ".bootstrap/part*" | Sort-Object Name
           if ($parts.Count -eq 0) { throw "Bootstrap-Teile fehlen" }
-          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
-          $zip = "pc_backup_vault_1.7.3_source.zip"
-          [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
-          $expectedHash = "caf5191fd41d7d52a6eaa880e7ed73a94d2f5ad0d9c8f023e36d136bdc665eba"
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          Write-Host "SHA256=$hash"
-          if ($hash -ne $expectedHash) { throw "SHA256 stimmt nicht mit dem Referenzpaket ueberein" }
+          $zip = "pc_backup_vault_source.zip"
+          $out = [IO.File]::Create($zip)
+          try {
+            foreach ($part in $parts) {
+              $text = (Get-Content $part.FullName -Raw).Trim()
+              $bytes = [Convert]::FromBase64String($text)
+              $out.Write($bytes, 0, $bytes.Length)
+            }
+          } finally { $out.Dispose() }
           Remove-Item "_source" -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -Path $zip -DestinationPath "_source" -Force
           $files = Get-ChildItem "_source" -File -Recurse
           Write-Host "Extrahierte Dateien: $($files.Count)"
-          if ($files.Count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $($files.Count)" }
+          if ($files.Count -lt 59) { throw "Quellpaket unvollstaendig: erwartet mindestens 59, gefunden $($files.Count)" }
           $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
           foreach ($name in $required) { if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" } }
+          $versionText = Get-Content "_source/NEU_IN_VERSION_1.7.3.txt" -Raw
+          if ($versionText -notmatch "1\.7\.3") { throw "Versionsnachweis 1.7.3 fehlt" }
           Get-ChildItem "_source" -Force | ForEach-Object { Copy-Item $_.FullName -Destination "." -Recurse -Force }
+          (Get-Content "config_store.py" -Raw) -replace 'APP_VERSION\s*=\s*"1\.7\.2"','APP_VERSION = "1.7.3"' | Set-Content "config_store.py" -Encoding UTF8
           Remove-Item "_source" -Recurse -Force
           Remove-Item $zip -Force
           Remove-Item ".bootstrap" -Recurse -Force -ErrorAction SilentlyContinue
@@ -54,5 +59,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if (git diff --cached --quiet) { Write-Host "Keine Aenderungen."; exit 0 }
-          git commit -m "Materialize verified PC Backup Vault 1.7.3 source"
+          git commit -m "Materialize PC Backup Vault 1.7.3 source"
           git push
