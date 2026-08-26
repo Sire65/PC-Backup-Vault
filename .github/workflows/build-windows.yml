@@ -1,0 +1,50 @@
+name: Windows EXE bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "schema.sql"
+      - "BUILD_EXE.bat"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhaengigkeiten installieren
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: PC Backup Vault bauen
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
+
+      - name: Windows-Paket als ZIP erstellen
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.7.3_Windows.zip" -Force
+
+      - name: Windows-Paket bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC_Backup_Vault_1.7.3_Windows
+          path: PC_Backup_Vault_1.7.3_Windows.zip
+          if-no-files-found: error
+          retention-days: 30
