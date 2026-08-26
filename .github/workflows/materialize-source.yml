@@ -28,15 +28,21 @@ jobs:
             Write-Host "Bootstrap bereits entfernt; nichts zu tun."
             exit 0
           }
-          $segments = foreach ($part in $parts) {
-            $raw = Get-Content $part.FullName -Raw
-            $clean = $raw -replace '[^A-Za-z0-9+/=]', ''
-            Write-Host "$($part.Name): raw=$($raw.Length) clean=$($clean.Length)"
-            $clean
+          $out = [System.IO.File]::Open("source.zip", [System.IO.FileMode]::Create)
+          try {
+            foreach ($part in $parts) {
+              $raw = Get-Content $part.FullName -Raw
+              $clean = $raw -replace '[^A-Za-z0-9+/=]', ''
+              $clean = $clean.TrimEnd('=')
+              while (($clean.Length % 4) -ne 0) { $clean += '=' }
+              $bytes = [Convert]::FromBase64String($clean)
+              $out.Write($bytes, 0, $bytes.Length)
+              Write-Host "$($part.Name): $($bytes.Length) Bytes decodiert"
+            }
           }
-          $b64 = $segments -join ''
-          while (($b64.Length % 4) -ne 0) { $b64 += '=' }
-          [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
+          finally {
+            $out.Dispose()
+          }
           $hash = (Get-FileHash "source.zip" -Algorithm SHA256).Hash.ToLower()
           Write-Host "source.zip SHA256=$hash"
           New-Item -ItemType Directory -Force -Path "_source" | Out-Null
