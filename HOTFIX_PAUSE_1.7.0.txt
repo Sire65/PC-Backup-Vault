@@ -1,0 +1,17 @@
+PC Backup Vault 1.7.0 – Pause-Anzeige Hotfix
+
+Änderung:
+- Oberer Backup-Startbutton zeigt den Laufzustand eindeutig an.
+- Laufend: blau – „Sicherung läuft …“
+- Pause: orange/gelb blinkend – „PAUSE – Sicherung pausiert“
+- Fortsetzen: Blinken wird sofort beendet, Button wieder blau.
+- Abbruch läuft: rot.
+- Nach Jobende: Bereitschaftsfarbe wird wieder automatisch berechnet.
+
+Test:
+- echter Tk-Fenstertest unter GUI-Laufzeit
+- Blinkwechsel PASS
+- Resume/Abbruch beendet Blink-Timer PASS
+- Python-Kompilierung PASS
+
+Keine Änderung an Neon-Schema, B2, Verschlüsselung oder Sicherungsdaten.

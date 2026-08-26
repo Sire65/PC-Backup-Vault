@@ -1,0 +1,9 @@
+PC Backup Vault 1.4.1
+
+Konsolidierungs-Hotfix nach Tiefenregression:
+- STARTEN.bat zeigt korrekte Version 1.4.1.
+- Fehlendes Python wird sauber erkannt.
+- Abhaengigkeiten werden auch bei vorhandener .venv nach Versionswechsel nachinstalliert.
+- BUILD_EXE prueft Abhaengigkeiten und bindet das Matplotlib-Tk-Backend explizit ein.
+- Keine Aenderung am Datenbankschema oder an gespeicherten Backups.
+- Datenbankvalidierung fuer Sicherungsart und nicht-negative Zähler/Größen ergänzt.

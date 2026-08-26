@@ -1,0 +1,7 @@
+PC Backup Vault 1.4.3
+
+Hotfix nach Windows-Ersttest:
+- Serverseitiger Schutz gegen Core-Downgrade durch versehentlich gestartete Altversionen.
+- Schema/Core und App-Version konsistent auf 1.4.3.
+- STARTEN.bat und Abhaengigkeitsmarker auf 1.4.3.
+- Altversion kann nach erfolgreicher 1.4.3-Core-Einrichtung den Core nicht mehr herunterstufen.

@@ -1,0 +1,9 @@
+PC Backup Vault Update 1.4.4 -> 1.4.5
+
+1. PC Backup Vault komplett schliessen.
+2. Alle Dateien aus diesem Update-Ordner in den bestehenden Programmordner kopieren.
+3. Vorhandene Dateien ersetzen.
+4. Den vorhandenen .venv-Ordner NICHT loeschen.
+5. STARTEN.bat aus dem bestehenden Programmordner starten.
+
+Es werden keine neuen Python-Pakete benoetigt.

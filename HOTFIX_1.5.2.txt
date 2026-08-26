@@ -1,0 +1,10 @@
+PC Backup Vault 1.5.2
+
+Bedienungsverbesserung:
+- sichtbarer Aktivitätsbalken bei Datenbank-Verbindungstest
+- sichtbarer Aktivitätsbalken bei Schema/Core-Prüfung
+- sichtbarer Aktivitätsbalken bei Backblaze-B2-Verbindungstest
+- verstrichene Laufzeit wird live angezeigt
+- jeweiliger Testbutton ist während des Vorgangs gesperrt
+- keine erfundene Restzeit bei Vorgängen mit unbekannter Dauer
+- Prüfungen laufen im Hintergrund; das Einstellungsfenster bleibt bedienbar

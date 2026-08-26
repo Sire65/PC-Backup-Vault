@@ -1,0 +1,10 @@
+PC Backup Vault 1.7.1
+=====================
+
+- Backup-Reports: Kopieren in die Zwischenablage
+- Backup-Reports: Drucken über Windows
+- Backup-Reports: manuelle Übergabe an KC Kommunikation
+- TÜV-/Architekturreport: Kopieren und Drucken
+- TÜV-/Architekturreport: manuelle Übergabe an KC Kommunikation
+- bestehende automatische TÜV-Warn-/Fehlermeldung bleibt erhalten
+- Quellcode-Kompilierungsprüfung bestanden

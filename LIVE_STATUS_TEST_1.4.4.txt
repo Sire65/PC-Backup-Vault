@@ -1,0 +1,21 @@
+PC Backup Vault 1.4.4 – gezielte Regression Live-Status
+
+Ergebnis: 12/12 pytest-Pruefungen bestanden.
+
+Geprueft:
+- alle Python-Dateien kompilieren
+- Live-Status-Felder vorhanden
+- Rundinstrument verwendet natives Tkinter-Canvas, kein Matplotlib
+- UI-Aktualisierung auf ca. 5 Hz gedrosselt
+- Backup-Engine liefert Bytes/Dateien/Phase/Laufzeit
+- SHA-256-Hashfortschritt erreicht exakte Dateigroesse
+- neuer erweiterter Callback bleibt rueckwaertskompatibel
+- App/Core/Startversion 1.4.4 konsistent
+- neue Architekturregeln MON-004 und UX-005 vorhanden
+- STARTEN.bat kann vorhandene .venv aus Schwester-Version wiederverwenden
+- schneller Modulcheck vermeidet unnoetige pip-Installation
+- EXE-Build-Titel auf 1.4.4 bereinigt
+
+Hinweis:
+Der echte Windows-Live-Test mit grossen Dateien erfolgt auf dem Benutzer-PC, weil dort Tkinter,
+Windows-Anmeldetresor und die reale Netzwerkverbindung zusammenlaufen.

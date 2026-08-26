@@ -1,0 +1,56 @@
+PC BACKUP VAULT 1.6.2 – TIEFENREGRESSION
+Datum: 23.08.2026
+
+ERGEBNIS
+- Lokale pytest-Regression: 67/67 PASS
+- Python-Compile/AST: 17/17 Module PASS
+- Statische Sicherheitsprüfung: PASS, 0 Findings
+- Requirements gegenüber 1.6.1: unverändert
+- Keine Live-Neon-DSN / kein npg_-Secret im Releasecode gefunden
+- Temporäre __pycache__/pyc-Dateien vor Verpackung entfernt
+
+PERFORMANCE-REGRESSION
+- B2/S3-Client wird pro Store wiederverwendet; Konstruktion im Unit-Test exakt 1x.
+- B2-Pipeline: begrenzter ThreadPoolExecutor, Standard 4, zulässig 1–8.
+- Worker berühren keine PostgreSQL-Verbindung; DB-Metadaten werden im Koordinator geschrieben.
+- Durable DB-Checkpoint: einmal pro fertigem Primary-File + dessen In-Run-Duplikate, nicht mehr pro B2-Chunk.
+- Synthetischer Latenzbenchmark mit 24 kleinen Dateien und 40 ms künstlicher B2-Latenz:
+  * 1 Worker: 0,978 s
+  * 4 Worker: 0,248 s
+  * synthetischer Speedup: 3,94x
+  Dies ist ausdrücklich kein Messwert des echten Benutzer-Internets/B2-Buckets.
+
+KRYPTOGRAFIE / INTEGRITÄT
+- AES-256-GCM Upload-/Decrypt-Roundtrip: PASS
+- ZLIB + AES-GCM Roundtrip: PASS
+- Mehrchunk-Datei (>8 MiB): PASS
+- SHA-256 des Ciphertexts wird vor Annahme geprüft: PASS
+- Pause blockiert Worker und Fortsetzen setzt korrekt fort: PASS
+- Cancel vor Workerstart löst BackupCancelled aus: PASS
+- Identische neue Dateien innerhalb desselben Laufs werden in Primary + In-Run-Duplikate gruppiert: PASS
+- Kritischer Objekt-Key-Fall behoben: gleiche Inhalte können nicht mehr denselben deterministischen B2-Key mit unterschiedlicher AES-GCM-Nonce überschreiben.
+- Kapazitätsschätzung zählt denselben neuen SHA innerhalb eines Laufs nur einmal.
+
+NEON-SCHEMA-/TÜV-REGRESSION
+- Ausgangsbasis des Testbranches: produktiver Stand 1.5.1.
+- Upgrade auf 1.6.2 auf isoliertem Neon-Testbranch: PASS.
+- Core schema_version: 1.6.2
+- Performance-Felder: 7/7
+- Architektur-/Integritätsregeln PERF-001, PERF-002, PERF-003, INT-010: 4/4 aktiv
+- public/KC-Tabellen: 0
+- Gültige Performance-Metriken mit 4 Workern / 2248 Requests: INSERT PASS
+- Ungültige Workerzahl 9: durch DB-Constraint korrekt BLOCKIERT
+- Testbranch nach Prüfung gelöscht.
+- Produktiver Branch wurde bei der Regression NICHT verändert.
+
+UI / REPORTING
+- Einstellung „Parallele B2-Uploads“ vorhanden, Bereich 1–8, Standard 4.
+- Live-Status zeigt Phase „B2-Pipeline 4×“ bzw. konfigurierte Workerzahl.
+- Report enthält Scan-/Hashzeit, Payload-Wanduhrzeit, Transform-, Upload- und DB-Servicezeit, Workerzahl, Requestzahl und B2-Payload-Durchsatz.
+- Dashboard enthält neues Register „Performance“ mit Zeit-, Durchsatz-, Servicezeit- und Worker/Request-Grafiken.
+- Hinweis im Report: parallele Worker-Servicezeiten dürfen nicht zur Gesamtdauer addiert werden.
+
+GRENZEN / E2E
+- Der neue Parallelpfad wurde nicht mit den echten Windows-Credentials und dem realen Backblaze-Bucket des Benutzers ausgeführt, weil diese Zugangsdaten absichtlich nur im Windows-Anmeldetresor liegen.
+- Daher wird keine konkrete reale Beschleunigung (z. B. 2x/4x) versprochen.
+- Vor endgültiger Produktivfreigabe: echten B2-Lauf auf Windows mit 1.6.2 durchführen und Performance-Report vergleichen.

@@ -1,0 +1,14 @@
+PC Backup Vault 1.7.1
+=====================
+Release-Status: TESTVERSION / KONSOLIDIERTER QUELLSTAND
+
+PASS
+- Python-Quellcode vollständig kompiliert
+- Report: Kopieren / Drucken / KC Kommunikation integriert
+- TÜV-Report: Kopieren / Drucken / KC Kommunikation integriert
+- vorhandene KC-Machine-Anbindung beibehalten
+
+NOCH AUF WINDOWS ZU PRÜFEN
+- echter Druckauftrag
+- KC Pairing und Ende-zu-Ende-Versand
+- Neon/B2-abhängiger Selftest (in der Build-Umgebung fehlte psycopg)

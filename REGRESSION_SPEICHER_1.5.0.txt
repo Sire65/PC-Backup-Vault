@@ -1,0 +1,35 @@
+PC Backup Vault 1.5.0 – Regression Speicherarchitektur
+
+Ergebnis: PASS
+
+Lokale Prüfungen: 25/25 bestanden
+- Python-Quellcode kompiliert
+- App/Core-Version 1.5.0 konsistent
+- Speicherziel-Combo vorhanden
+- Dateispeicher/B2-Einstellungsseite vorhanden
+- B2-Zugangsdaten nur für Windows-Anmeldetresor vorgesehen
+- keine echte PostgreSQL-Verbindungszeichenfolge im Release eingebettet
+- AUTO ohne B2 -> NEON
+- AUTO mit B2 -> B2
+- explizites B2 ohne Einrichtung wird blockiert
+- Neon-Laufgrößenlimit greift nur für NEON-Payload
+- B2-Kostenschutz vorhanden
+- B2-Chunks 8 MiB zur Reduktion von Requests
+- B2 Upload/Download/Connection mit botocore Stubber erfolgreich
+- Restore-Pfad für B2 vorhanden
+- One-Touch/Scheduler speichert Payload-Ziel
+- Backup Explorer erhält B2-Konfiguration für Restore
+
+Echter Neon-Migrationstest auf isoliertem Testbranch:
+- bestehende backup_jobs -> payload_target NEON
+- bestehende files -> payload_backend NEON
+- bestehende file_chunks -> storage_backend NEON
+- 4 neue Constraints vorhanden
+- B2-Chunk-Metadaten mit encrypted_data=NULL + object_key akzeptiert
+- Testbranch nach Abschluss gelöscht
+- produktiver Branch während des Tests nicht geändert
+
+Noch nicht möglich ohne echte Backblaze-Zugangsdaten:
+- realer Upload in einen echten B2 Bucket
+- realer B2 Download/Restore über Internet
+Diese beiden Punkte werden beim Einrichten des B2 Buckets mit einer kleinen Testdatei abgenommen.

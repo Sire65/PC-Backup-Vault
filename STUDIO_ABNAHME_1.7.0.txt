@@ -1,0 +1,19 @@
+PC Backup Vault 1.7.0 – Studio-Abnahme
+======================================
+Datum: 24.08.2026
+Ergebnis: PASS
+
+Geprüft unter virtueller Tk/Windows-ähnlicher Desktopgeometrie:
+- Hauptfenster 1200x800: keine abgeschnittenen Sicherungsaktionen nach Layoutkorrektur
+- 6 obere Systemstatusanzeigen vorhanden: Neon, B2, Tresor, Scheduler, Verify/TÜV, KC Kommunikation
+- Backup-Startbutton: orange/grün/rot/blau je Zustand
+- Dashboard 1400x900: Filter, Von/Bis, Anwenden/Zurücksetzen vollständig sichtbar
+- Dashboard Kartenbereich ohne Text-/Zahlenüberlappung
+- Chartflächen mit Mindesthöhe/Scrollen
+- Mehrstatus-Test mit SUCCESS, FAILED, INTERRUPTED, CANCELLED, PARTIAL, BLOCKED_LIMIT, RUNNING ohne Überlappung
+- Lazy-Dateikatalog: initial 0 Loads, beim Inventar genau 1 Load
+
+Studio-Screenshots im Vollpaket:
+- STUDIO_MAIN_1.7.0.png
+- STUDIO_DASHBOARD_1.7.0.png
+- STUDIO_DASHBOARD_DATA_1.7.0.png

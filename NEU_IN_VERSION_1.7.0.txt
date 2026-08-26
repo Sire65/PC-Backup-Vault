@@ -1,0 +1,17 @@
+PC Backup Vault 1.7.0
+=====================
+
+Schwerpunkte
+- Wiederaufnahme nach unerwartetem Strom-/Programmabbruch
+- verschlüsselter lokaler Recovery-Checkpoint
+- Single-Instance-Schutz
+- echte KC-Communication-Machine-Kopplung mit Pairing-Code
+- schnelleres Dashboard mit Lazy-Dateikatalog
+- Studio-korrigiertes Dashboard-/Hauptfensterlayout
+- farbiger Backup-Startbutton als Bereitschaftsanzeige
+- erweiterter TÜV und Architekturregeln
+
+Betriebshinweis
+Nach dem Update einmal Einstellungen > Datenbanken > Schema / Core prüfen.
+Die lokale KC-Kommunikation muss einmal registriert und per Pairing-Code freigeschaltet werden.
+Ein realer harter Windows-Stromausfalltest mit echtem B2 ist weiterhin als Feldabnahme empfohlen.

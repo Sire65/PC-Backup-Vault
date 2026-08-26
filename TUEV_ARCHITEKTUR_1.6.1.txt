@@ -1,0 +1,39 @@
+PC BACKUP VAULT 1.6.1 – TÜV / ARCHITEKTURABNAHME
+Datum: 23.08.2026
+
+GESAMTERGEBNIS: PASS / RELEASE-KANDIDAT
+
+ARCHITEKTUR
+PASS  Isolation unveraendert: backup_vault bleibt getrennt von KC-Systemen.
+PASS  Keine public/KC-Tabellen im Neon-Testbranch.
+PASS  B2/Neon-Split-Architektur unveraendert.
+PASS  AES-256-GCM / SHA-256 / Windows-Anmeldetresor unveraendert.
+PASS  Dashboard entschluesselt Dateinamen/Pfade nur lokal fuer Anzeige/Suche.
+PASS  Filter schreiben keine Klartext-Dateinamen nach Neon.
+
+UX / MONITORING
+PASS  Semantische Statusfarben: Gruen=OK, Gelb=Warnung, Rot=Fehler, neutrale Daten Blau/Teal/Purple.
+PASS  Professionelle Kennzahlenkarten.
+PASS  Balken-/Saeulen-/Linien-/Ringdiagramme vorhanden.
+PASS  Dashboard-Kennzahlen reagieren auf aktiven Filter.
+PASS  Zeitfilter Tag/Woche/Monat/Quartal/Jahr/Benutzerdefiniert.
+PASS  Status-/Sicherungsart-/Speicher-/Verify-Filter.
+PASS  Nur-problematische-Filter.
+PASS  Suche Datei/Ordner/Job-ID/Plan.
+PASS  Historie nutzt dieselbe Filtersemantik.
+PASS  Horizontale und vertikale Scrollbars in der Historientabelle.
+
+CORE
+PASS  Test-Core 1.6.1 / App-Min 1.6.1
+PASS  UX-011 vorhanden
+PASS  UX-012 vorhanden
+
+REGRESSION
+PASS  57/57 Tests
+PASS  Python-Kompilierung
+PASS  AST/Sicherheitscheck 0 Findings
+PASS  Secret-Scan 0 Findings
+
+ABNAHMEHINWEIS
+Der produktive Core wird erst auf 1.6.1 gesetzt, wenn der Benutzer nach Installation in
+Einstellungen -> Datenbanken -> Schema / Core pruefen ausfuehrt.

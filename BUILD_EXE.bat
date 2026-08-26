@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title PC Backup Vault 1.7.3 - EXE Build
+title PC Backup Vault 1.7.0 - EXE Build
 
 where py >nul 2>nul
 if %errorlevel%==0 (
@@ -21,8 +21,6 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :err
 )
 
-".venv\Scripts\python.exe" -m pip install --upgrade pip
-if errorlevel 1 goto :err
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :err
 ".venv\Scripts\python.exe" -m pip install pyinstaller
@@ -32,7 +30,7 @@ if errorlevel 1 goto :err
 if errorlevel 1 goto :err
 
 echo.
-echo Fertig: dist\PC_Backup_Vault\PC_Backup_Vault.exe
+echo EXE liegt unter dist\PC_Backup_Vault\PC_Backup_Vault.exe
 pause
 exit /b 0
 

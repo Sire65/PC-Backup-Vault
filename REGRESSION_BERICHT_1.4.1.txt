@@ -1,0 +1,38 @@
+PC Backup Vault 1.4.1 – Tiefenkonsolidierung / Regression
+
+Ergebnis: RELEASE-KANDIDAT NACH REGRESSION
+
+Lokale Fremdprüfung:
+- pytest: 54/54 Prüfungen bestanden
+- Python AST/Bytecode: alle Python-Dateien syntaktisch gültig
+- SHA-256/AES-256-GCM: Roundtrip, Manipulation, falscher Schlüssel und falsches AAD geprüft
+- HMAC-Pfadschutz: Normalisierung und Schlüsseltrennung geprüft
+- Restore-Pfadschutz: Traversal bleibt im gewählten Zielordner
+- Scheduler: keine DSN/Passwörter/Keys in Task-Befehl; Taskname wird bereinigt
+- UI: rote Pflichtfeld-Sterne, deutsche Scheduler-Bezeichnungen, Sicherungsart-Combo geprüft
+- Dashboard/Core/Retention/Versionierungsfelder statisch geprüft
+- Keine echte PostgreSQL-Verbindungszeichenfolge im Releasecode gefunden
+
+Echter Neon-Regressionstest auf isoliertem Branch:
+- FULL/INCREMENTAL-Metadaten schreiben/lesen: PASS
+- Deduplikationsquelle vorhanden: PASS
+- Löschschutz vor Fristende: PASS (Delete blockiert)
+- Löschen nach Fristende: PASS
+- FK-Cascade files -> chunks: PASS
+- Restore-Audit bleibt nach Job/File-Löschung erhalten: PASS
+- Ungültige Sicherungsart: PASS (DB lehnt ab)
+- Negative Job-Zähler: PASS (DB lehnt ab)
+- Negative Dateigröße: PASS (DB lehnt ab)
+
+Konsolidierungsfixes 1.4.1:
+- STARTEN.bat zeigt richtige Version und erkennt fehlendes Python verständlich.
+- Abhängigkeiten werden nach Versionswechsel auch bei vorhandener .venv aktualisiert.
+- BUILD_EXE bindet Matplotlib-Tk-Backend explizit ein.
+- DB CHECK-Constraints für Sicherungsart und nicht-negative Metriken ergänzt.
+
+Noch nicht in dieser Linux-Umgebung ausführbar:
+- Echter Windows-GUI-Start mit Tk-Fenster
+- Windows Credential Manager (keyring)
+- Windows Task Scheduler (schtasks)
+- PyInstaller-Windows-EXE-Build
+Diese vier Punkte müssen beim ersten PC-Endtest geprüft werden.

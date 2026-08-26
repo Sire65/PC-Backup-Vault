@@ -1,0 +1,18 @@
+PC Backup Vault 1.6.2 – B2/psycopg Hotfix
+
+Fehler:
+  'Connection' object has no attribute 'executemany'
+
+Ursache:
+  psycopg 3 stellt executemany() am Cursor bereit, nicht direkt an Connection.
+
+Korrektur:
+  B2-Chunk-Metadaten werden jetzt mit einem Cursor per executemany() geschrieben.
+  Die B2-Worker laden weiterhin parallel hoch; Neon-Schreibzugriffe bleiben im Hauptthread.
+
+Installation:
+  PC Backup Vault beenden.
+  backup_engine.py in den vorhandenen Programmordner kopieren und ersetzen.
+  Danach STARTEN.bat starten.
+
+Keine Änderungen an Konfiguration, Schlüsseln, .venv, B2-Daten oder bestehenden Sicherungen.

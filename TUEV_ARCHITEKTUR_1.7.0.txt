@@ -1,0 +1,38 @@
+PC Backup Vault 1.7.0 – TÜV / Architektur-Endabnahme
+===================================================
+Datum: 24.08.2026
+Gesamtergebnis: PASS (Labor-/Architekturabnahme)
+
+Neon-Testbranch (isoliert, produktiv unverändert)
+- Ausgangs-Core: 1.6.2 / backup-only
+- Upgrade: 1.7.0 PASS
+- Recovery-Felder: 5/5
+- 1.7-Recovery/Systemregeln: 8/8
+- Recovery-Constraints: 4/4
+- Recovery-Indizes: 2/2
+- public/fremde Tabellen: 0
+- INTERRUPTED / RECOVERABLE: akzeptiert
+- ungültiger Recovery-State: blockiert
+- negativer Resume-Zähler: blockiert
+- Core-Downgrade 1.7.0 -> 1.6.2: blockiert
+- Testbranch nach Prüfung gelöscht
+
+Architektur
+PASS – strikte PC-Backup-Vault-Isolation
+PASS – Neon nur Core/Metadaten/Audit; B2 für großen verschlüsselten Payload
+PASS – AES-256-GCM vor Upload, SHA-256-Integrität
+PASS – Secrets nur OS Credential Store/keyring
+PASS – Recovery-Checkpoint verschlüsselt, keine Klartextpfade
+PASS – Single-Instance-Schreibschutz
+PASS – CANCELLED/KNOWN FAILED nicht automatisch recoverable
+PASS – Resume-Job-Verknüpfung und unveränderte-Datei-Regel
+PASS – KC Machine API ausschließlich technische Ereignismetadaten
+PASS – KC-Gerätetoken nur OS-Tresor
+PASS – Dashboard-Dateikatalog Lazy-Load
+PASS – Weihnachtsmarkt-Schutz bleibt verbindlich
+PASS – B2 Workerlimit/Parallelitätsregeln bleiben aktiv
+
+Noch als Feldnachweis empfohlen
+1. Realer Windows-Hartabbruch/Stromausfall während eines kleinen B2-Testbackups; Neustart und Fortsetzung.
+2. KC-Gerät lokal registrieren, Pairing-Code freigeben und echte Testmeldung Ende-zu-Ende senden.
+3. Eine reale B2-Datei im Backup-Explorer zurückholen und SHA-256-Restore-Nachweis kontrollieren, falls noch nicht auf dem Benutzer-PC durchgeführt.

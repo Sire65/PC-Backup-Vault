@@ -1,0 +1,17 @@
+PC Backup Vault 1.6.1 – Dashboard & Historie
+
+NEU
+- Professionelle farbige Kennzahlenkarten.
+- Einheitliche Statusfarben: Gruen=OK, Gelb=Warnung, Rot=Fehler, Blau/Teal=neutrale Daten/Trends.
+- Balken-, Saeulen-, Linien- und Ringdiagramme statt einfarbiger Rohgrafiken.
+- Zeitraumfilter: Heute, Diese Woche, Letzte Woche, Letzte 7 Tage, Letzte 30 Tage, Dieser/Letzter Monat, Dieses/Letztes Quartal, Dieses/Letztes Jahr, Alle, Benutzerdefiniert.
+- Filter nach Status, Sicherungsart, Speicherziel und Verify-Ergebnis.
+- Option "nur problematische".
+- Suche nach Datei, Ordner, Job-ID, Plan und weiteren Job-Metadaten.
+- Historienfenster mit denselben Filtern, Statusfarben, Report- und Verify-Aktion.
+- Alle Dashboard-Karten und Diagramme reagieren auf den aktiven Filter.
+
+TECHNIK
+- Neue Module: backup_filters.py, history_window.py.
+- Keine neue externe Python-Abhaengigkeit.
+- Backup-/Restore-/Kryptografie-Logik unveraendert.

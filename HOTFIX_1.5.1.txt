@@ -1,0 +1,8 @@
+PC Backup Vault 1.5.1
+
+Hotfix für Backblaze-B2-Verbindungstest:
+- ListObjectsV2 verwendet jetzt den konfigurierten Ordner/Prefix.
+- Kompatibel mit Backblaze-App-Keys, die auf namePrefix beschränkt sind.
+- Verbindungstest prüft zusätzlich Schreiben, Lesen und Löschen eines 32-Byte-Probeobjekts.
+- Probeobjekt wird direkt wieder gelöscht.
+- Keine Änderung am Backupformat oder an bestehenden Sicherungen.

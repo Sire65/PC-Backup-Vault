@@ -1,0 +1,44 @@
+PC BACKUP VAULT 1.6.2 – TÜV / ARCHITEKTUR-ABNAHME
+Datum: 23.08.2026
+
+STATUS: PASS als Release-Kandidat; echter Windows/B2-E2E noch empfohlen.
+
+ARCHITEKTUR
+PASS – Backup-System bleibt strikt vom KC-Core/Mirror/Futura/Kassen/Dienstplan getrennt.
+PASS – Neon bleibt Core/Katalog/Audit; große verschlüsselte Payloads liegen in B2.
+PASS – B2-Worker verwenden keine PostgreSQL-Verbindung.
+PASS – Ein gemeinsamer B2/S3-Client wird mit begrenztem Connection-Pool wiederverwendet.
+PASS – Worker-Limit 1–8; Standard 4.
+PASS – Durable DB-Bestätigung pro Datei statt pro B2-Chunk.
+PASS – Pause/Fortsetzen/Abbrechen bleiben kooperativ; laufende HTTP-Anfrage wird nicht hart beendet.
+PASS – kontrollierter Fehler/Abbruch bereinigt hochgeladene Objekte ohne dauerhaften DB-Checkpoint nach Möglichkeit.
+PASS – gleicher SHA innerhalb eines Laufs wird genau einmal als B2-Payload hochgeladen; weitere Dateien werden erst nach Primary-Checkpoint DEDUPED.
+
+SICHERHEIT
+PASS – AES-256-GCM bleibt unverändert clientseitig.
+PASS – SHA-256-Integritätsprüfungen bleiben unverändert.
+PASS – B2-Zugangsdaten bleiben ausschließlich im lokalen OS-Anmeldetresor.
+PASS – keine neue Python-Abhängigkeit.
+PASS – statischer Secret-/High-Risk-Code-Scan ohne Finding.
+
+MONITORING
+PASS – 7 Performance-Felder serverseitig vorgesehen.
+PASS – Report und Performance-Dashboard zeigen die neuen Metriken.
+PASS – PERF-010/011 im TÜV prüfen DB-Felder und Worker-Limit.
+PASS – neue Architekturregeln PERF-001/002/003 und INT-010.
+
+NEON-ABNAHME AUF TEMPORÄREM BRANCH
+PASS – Upgrade 1.5.1 -> 1.6.2.
+PASS – 7/7 Performance-Felder.
+PASS – 4/4 neue Performance-/Integritätsregeln.
+PASS – 0 public/KC-Tabellen.
+PASS – gültiger Metrikdatensatz mit 4 Workern akzeptiert.
+PASS – Workerzahl 9 serverseitig blockiert.
+PASS – Testbranch nach Prüfung gelöscht.
+
+OFFEN FÜR ECHTEN ENDTEST
+- Windows-GUI mit realem Benutzerprofil.
+- echter Backblaze-B2-Upload mit 4 Workern.
+- Pause/Fortsetzen/Abbruch während eines realen parallelen B2-Laufs.
+- Verify/Restore eines mit 1.6.2 parallel erzeugten Backups.
+- Vergleich der Phasenzeiten mit dem 4,03-GB-Lauf vom 23.08.2026.

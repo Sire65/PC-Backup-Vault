@@ -50,6 +50,7 @@ _DASHBOARD_JOB_OPTIONAL_COLUMNS = (
 
 
 def schema_compatibility(dsn: str) -> dict:
+    """Return a small, read-only schema capability snapshot for graceful UI fallback."""
     activity("neon", "read")
     with psycopg.connect(dsn, connect_timeout=8) as conn:
         core = conn.execute(
@@ -73,6 +74,7 @@ def schema_compatibility(dsn: str) -> dict:
 
 
 def recent_jobs(dsn: str, limit: int = 100):
+    """Read jobs across old and current Core schemas without crashing the dashboard."""
     activity("neon", "read")
     with psycopg.connect(dsn) as conn:
         cols = {r[0] for r in conn.execute(
@@ -83,6 +85,7 @@ def recent_jobs(dsn: str, limit: int = 100):
         def opt(name: str, fallback: str = "0") -> str:
             return name if name in cols else f"{fallback} AS {name}"
 
+        # Keep this exact field order: dashboard_window.py indexes these tuples.
         select_parts = [
             "id", "started_at", "finished_at", "status", "file_count", "original_bytes",
             "stored_bytes", "deduplicated_bytes", "note", "trigger_type", "plan_name",
@@ -159,6 +162,8 @@ def file_status_counts(dsn: str):
 
 
 def recent_verifications(dsn: str, limit: int = 200):
+    # backup_verifications was introduced after Core 1.5.x. Old installations must
+    # still be able to open Dashboard/History before the user runs Schema/Core update.
     activity("neon", "read")
     with psycopg.connect(dsn) as conn:
         exists = bool(conn.execute(

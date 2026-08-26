@@ -1,0 +1,7 @@
+PC Backup Vault 1.4.5 Hotfix
+
+- Behebt Tkinter/Python-NameError bei verzögerten Fehlermeldungen aus Worker-Threads.
+- Exception-Texte werden vor self.after() sicher kopiert.
+- Vorab-Sicherheitsprüfung blockiert eine zu große Auswahl bereits vor Start des Backup-Threads.
+- Empfehlung zeigt bei überschrittenem Lauf-Limit sofort eine klare Sicherheitssperre.
+- Keine Änderung an Verschlüsselung, Deduplizierung oder Restore-Format.

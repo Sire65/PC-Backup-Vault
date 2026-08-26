@@ -1,0 +1,16 @@
+PC Backup Vault 1.5.0
+
+Neue Speicherarchitektur für große Backups:
+- Neon bleibt Core-/Metadaten-Datenbank (Katalog, Hashes, Historie, TÜV, Versionen).
+- Backblaze B2 kann die verschlüsselten Dateiblöcke speichern.
+- Auswahl vor jedem Backup: Automatisch, Backblaze B2, Neon nur Kleinmengen.
+- Automatisch bevorzugt B2 sobald B2 vollständig eingerichtet ist.
+- B2 Access Key / Application Key ausschließlich im Windows-Anmeldetresor.
+- B2 Kosten-Schutz mit Warn- und Hardlimit in GB.
+- Backup-Explorer und Restore lesen je Datei automatisch vom richtigen Speicherbackend.
+- Historie und Dashboard zeigen das verwendete Speicherbackend.
+- One-Touch/Scheduler speichern die gewählte Speicherstrategie pro Plan.
+
+Wichtig:
+B2 ist kein zweites SQL-Datenbankziel. B2 ist Object Storage für große verschlüsselte Dateidaten.
+Neon bleibt für die Verwaltungsdaten unverzichtbar.

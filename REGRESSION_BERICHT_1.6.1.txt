@@ -1,0 +1,40 @@
+PC BACKUP VAULT 1.6.1 – REGRESSION / DASHBOARD-KONSOLIDIERUNG
+Datum: 23.08.2026
+
+ERGEBNIS
+PASS – 57/57 automatisierte Tests bestanden.
+
+GEPRUEFT
+1. Python-Kompilierung aller Module: PASS
+2. Bestehende 1.6.0 Backup-/Verify-/Report-/Kryptografie-Regression: PASS
+3. Dashboard-Farblogik und Diagrammtypen (Balken/Saeulen/Linien/Ring): PASS
+4. Zeitraumfilter: Tag/Woche/7 Tage/30 Tage/Monat/Quartal/Jahr/Benutzerdefiniert: PASS
+5. Benutzerdefinierter Zeitraum inkl. ungueltigem Rueckwaertsbereich: PASS
+6. Filter Status/Sicherungsart/Speicher/Verify/problematische Laeufe: statisch/Logik PASS
+7. Suche nach Datei/Ordner/Job-ID/Plan: Implementierung PASS
+8. Historienfenster: Filter, horizontale/vertikale Scrollbars, Report/Verify-Aktionen: PASS
+9. Architekturregeln UX-011/UX-012 vorhanden: PASS
+10. AST-Sicherheitspruefung: 0 Findings
+11. Keine eval/exec, kein shell=True, keine Pickle/Marshal-Risikonutzung gefunden
+12. Secret-Scan: 0 eingebettete Neon-DSN/Passwort/Application-Key-Funde
+
+NEON-TEST
+Temporärer Testbranch: pc-backup-vault-1-6-1-dashboard-test
+Branch-ID: br-green-hill-afztmoui
+- Core schema_version: 1.6.1
+- app_min_version: 1.6.1
+- UX-011/UX-012 aktiv: 2/2
+- public tables: 0
+- Testbranch nach erfolgreicher Pruefung geloescht
+- Produktiver Branch wurde nicht veraendert.
+
+RISIKOABGRENZUNG
+1.6.1 aendert die Darstellung, Filterung, lokale Suche und Historiennavigation.
+Backup-, Restore-, Verschluesselungs-, B2- und Verify-Kernlogik wurde nicht funktional veraendert.
+
+WINDOWS-E2E
+Nach Installation auf dem Windows-PC sollte visuell geprueft werden:
+- Dashboard passt auf die konkrete Bildschirmaufloesung.
+- Filter/Benutzerdefiniert reagieren wie erwartet.
+- Farben und Beschriftungen sind gut lesbar.
+- Suche findet bekannte Datei/Ordner aus realen Backups.

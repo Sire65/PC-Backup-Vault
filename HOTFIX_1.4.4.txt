@@ -1,0 +1,16 @@
+PC Backup Vault 1.4.4
+
+Live-Status erweitert:
+- Rundinstrument mit Fortschritt in Prozent (leichtgewichtiges Tkinter-Canvas)
+- Dateien erledigt / gesamt
+- verarbeitete Daten / Gesamtmenge
+- geglaettete Live-Geschwindigkeit
+- geschaetzte Restzeit
+- verstrichene Laufzeit
+- aktuelle Phase und Datei
+- Anzeige wird auf ca. 5 Aktualisierungen/Sekunde gedrosselt, damit das Backup nicht merklich gebremst wird
+
+Start verbessert:
+- vorhandene Python-Umgebung wird wiederverwendet
+- bei neuem Schwesterordner kann eine funktionierende .venv einer Vorversion genutzt werden
+- wenn alle Module vorhanden sind, wird pip nicht erneut ausgefuehrt

@@ -1,0 +1,16 @@
+PC Backup Vault 1.7.2
+=====================
+
+KC-Kommunikationsdiagnose
+- Teilerfolg wird GELB statt ROT bewertet
+- Totalausfall bleibt ROT
+- erfolgreiche Zustellung bleibt GRÜN
+- HTTP-Fehlerantworten werden strukturiert ausgewertet
+- verständliche Kanaldiagnose statt rohem JSON
+- letzter Versandstatus wird im KC-Systemstatus angezeigt
+- neue Einzeltests: Push testen / E-Mail testen
+- lokales Kommunikationsprotokoll enthält Kanal, HTTP-Status und Kurzdiagnose
+
+Ziel
+- Providerfehler eindeutig isolieren
+- speziell den beobachteten HTTP-502-Fall Push-vs.-E-Mail nachvollziehbar machen

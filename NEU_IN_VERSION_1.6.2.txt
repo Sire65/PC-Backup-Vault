@@ -1,0 +1,12 @@
+PC Backup Vault 1.6.2 – Performance
+
+- Backblaze-B2-Client wird pro Lauf wiederverwendet statt für jedes Objekt neu aufgebaut.
+- B2-Payloads werden mit einem begrenzten parallelen Worker-Pool übertragen (Standard 4, einstellbar 1–8).
+- PostgreSQL/Neon wird niemals aus den Upload-Worker-Threads benutzt; der Koordinator schreibt Metadaten.
+- Durable Checkpoints erfolgen pro fertig gespeicherter Datei statt pro Chunk.
+- Pause, Fortsetzen und Abbrechen bleiben kooperativ und sicher.
+- Bei Fehler/Abbruch werden hochgeladene, aber noch nicht in Neon bestätigte B2-Objekte bereinigt.
+- Neue Phasenmetriken: Hash/Scan, Payload-Pipeline, Transformation, B2-Upload-Servicezeit, Neon-DB-Servicezeit.
+- Backup-Report zeigt Workerzahl, Upload-Requests und B2-Payload-Durchsatz.
+- Dashboard erhält Register „Performance“ mit Zeit-, Durchsatz-, Servicezeit- und Worker-Grafiken.
+- Integritätsfix: identische neue Dateien im selben Lauf werden nur einmal hochgeladen; In-Run-Duplikate werden erst nach bestätigtem Primary verknüpft.

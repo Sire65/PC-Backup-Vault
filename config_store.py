@@ -180,6 +180,7 @@ class ConfigStore:
     def get_master_key(self) -> str | None:
         return keyring.get_password(SERVICE, "master_key_v1")
 
+    # Backblaze B2 credentials stay only in the OS credential store.
     def set_b2_credentials(self, access_key_id: str, application_key: str):
         if access_key_id.strip():
             keyring.set_password(SERVICE, "b2_access_key_id", access_key_id.strip())
@@ -213,6 +214,8 @@ class ConfigStore:
         )
         return meta
 
+
+    # KC Communication machine token stays only in the OS credential store.
     def ensure_kc_device_token(self) -> str:
         import secrets
         token = keyring.get_password(SERVICE, "kc_machine_device_token")
@@ -228,6 +231,7 @@ class ConfigStore:
         try: keyring.delete_password(SERVICE, "kc_machine_device_token")
         except Exception: pass
 
+    # Compatibility aliases for older 1.6.x code.
     def set_kc_token(self, token: str):
         if (token or "").strip(): keyring.set_password(SERVICE, "kc_machine_device_token", token.strip())
     def get_kc_token(self): return self.get_kc_device_token()
@@ -278,3 +282,4 @@ class ConfigStore:
         if self.get_plan(pid):
             self.data["default_plan_id"] = pid
             self.save()
+

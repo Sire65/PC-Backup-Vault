@@ -32,6 +32,7 @@ def run_restore_selftest(dsn: str, key_b64: str, max_kb: int = 256, object_store
         out = restore_file(dsn, key_b64, str(file_id), Path(tmp), object_store_config=object_store_config)
         if not out.exists() or out.stat().st_size != original_size:
             raise ValueError("Restore-Selbsttest: wiederhergestellte Datei ist unvollständig.")
+        # TemporaryDirectory removes the restored copy immediately after verification.
         return {
             "status": "PASS",
             "details": "Automatischer Restore-Selbsttest erfolgreich; temporäre Kopie wurde entfernt.",

@@ -1,0 +1,104 @@
+1.7.0 – 24.08.2026
+- Crash-/Stromausfall-Recovery mit AES-256-GCM-Checkpoint und sicherer Wiederaufnahme.
+- Ursprungs-/Resume-Jobs werden verknüpft; vollständige unveränderte Dateien können wiederverwendet werden.
+- Single-Instance-Schutz für UI und Scheduler.
+- Echte KC-Communication-Machine-Anbindung mit Geräte-ID, Pairing-Code und Token nur im Windows-Tresor.
+- Dashboard lädt asynchron; Dateikatalog nur bei Bedarf.
+- Dashboard-Filterlayout und Hauptfenster-Aktionsbereich Studio-korrigiert, keine abgeschnittenen Datums-/One-Touch-Elemente.
+- Backup-Startbutton: grün/orange/rot/blau nach Betriebszustand.
+- TÜV um Recovery, Single-Instance, KC-Machine, Secret- und Lazy-Load-Prüfungen erweitert.
+- Tiefenregression 67/67 PASS; Studio-, Sicherheits- und Neon-Testabnahme PASS.
+
+1.6.3
+- Performance-Release für Backblaze B2.
+- B2/S3-Client wird innerhalb eines Laufs wiederverwendet statt pro Objekt neu aufgebaut.
+- Begrenzte parallele Datei-Uploads, standardmäßig 4 Worker, einstellbar 1–8.
+- Verschlüsselung und SHA-256 bleiben vor jedem Upload lokal aktiv.
+- DB-Metadaten werden nicht mehr vor jedem Chunk separat committed; fertige Dateien bleiben crash-sicher committed.
+- Neue Phasenmessung: Prüfung/Hash, Upload-Phase, Verarbeitung, kumulierte B2-Netzwerkzeit, Neon-Metadaten.
+- Report zeigt Workerzahl und Performance-Phasen.
+
+1.6.1
+- Dashboard visuell professionalisiert: semantische Farben, Kennzahlenkarten, Balken/Saeulen/Linien/Ringdiagramme.
+- Zeitfilter: Heute, diese/letzte Woche, 7/30 Tage, Monat, Quartal, Jahr, Alle und benutzerdefiniert.
+- Zusatzfilter: Status, Sicherungsart, Speicherziel, Verify-Status, problematische Laeufe.
+- Volltextsuche nach Datei, Ordner, Job-ID, Plan und Metadaten.
+- Historie mit denselben Filter-/Suchmoeglichkeiten und farblicher Statusdarstellung.
+- Dashboard-Kennzahlen und Diagramme folgen dem aktiven Filter.
+- Architekturregeln UX-011/UX-012 ergaenzt.
+
+1.6.0
+- Backup-Verifizierung (QUICK/FULL), Audit und Job-Reports
+- Scrollleisten und Report-Historie
+- Erweiterte Leistungs-/Kompressionsmetriken
+
+1.5.3
+- Pause/Fortsetzen-Toggle im Live-Status
+- Sicherer Abbrechen-Button mit CANCELLED-Status und Rollback
+- Pausenzeit aus ETA/Laufzeit herausgerechnet
+- Manuelle und One-Touch-Läufe gegen parallelen Start geschützt
+
+
+1.5.2
+- Aktivitäts-/Zeitbalken für DB-Verbindungstest, Schema/Core und B2-Test.
+- Online-Prüfungen blockieren die Oberfläche nicht mehr.
+PC Backup Vault 1.4.4
+- Live-Fortschritt mit Rundinstrument, Tempo, Datenmenge, Dateien, Lauf- und Restzeit
+- UI-Updates gedrosselt fuer geringe Rechenlast
+- Start verwendet vorhandene Python-Umgebung wieder und vermeidet unnoetige pip-Laeufe
+- EXE-Build-Titel bereinigt
+
+PC Backup Vault 1.4
+
+Qualitäts- und Bedienupdate:
+- Pflichtfelder mit rotem Sternchen
+- Speichern wird bei fehlenden/ungültigen Pflichtfeldern blockiert
+- Datenbank-Einstellungen logisch gruppiert
+- Scheduler-Bezeichnungen vollständig auf Deutsch
+- Uhrzeit/Wochentag abhängig vom Scheduler-Modus aktiviert
+- Zweite unabhängige Kopie im One-Touch-Plan bedienbar
+- Aufbewahrung und Restore-Selbsttest im Sicherheitsbereich bedienbar
+- Core-Tabelle und erwartete Schema-Version im Sicherheitsbereich sichtbar
+- Hauptseite in Sicherung und Übersicht/Wiederherstellung gruppiert
+- Altordner und Python-Cache aus dem Auslieferungspaket entfernt
+- Core/Schema auf 1.4.3
+
+========================================
+
+PC Backup Vault 1.3
+
+Neu:
+- Combo Sicherungsart direkt vor Backup starten
+- Empfohlen (automatisch), Vollständig, Inkrementell, Schnell
+- Automatische Empfehlung für die nächste Sicherung mit Begründung
+- Vollständig: alle Dateien per SHA-256 prüfen, vollständigen logischen Stand erzeugen; Deduplizierung bleibt aktiv
+- Inkrementell: alle Dateien per SHA-256 prüfen, nur neue/geänderte Versionen anlegen
+- Schnell: Größe und Änderungszeit zuerst vergleichen; nur geänderte/verdächtige Dateien hashen
+- Backup-Historie zeigt die verwendete Sicherungsart
+- Dashboard zeigt Verteilung der Sicherungsarten
+- Serverfelder für geprüft/geändert/übersprungen
+- Löschschutz/Versionierungsfelder serverseitig synchronisiert
+
+========================================
+
+PC Backup Vault 1.2
+
+Erweiterungen gegenüber 1.1:
+- Neues Dashboard mit Kennzahlen und Grafiken
+- Säulen-, Torten-, Linien- und Balkendiagramme
+- Anzeige von Geschwindigkeit, Erfolgs-/Fehlerquote, Dateien, Verzeichnissen und Kapazität
+- Übersicht zu Restore-Tests und TÜV-Ergebnissen
+- Top-Dateitypen, Top-Verzeichnisse und Plan-/Auslöservergleich
+- Nutzungsverlauf aus usage_snapshots
+- Automatische usage_snapshots vor/nach Backup-Läufen
+- Backup-Schema/Core auf 1.2.0 angehoben
+
+1.6.3
+- Dashboard-Charts mit Mindesthöhe, constrained layout und scrollbaren Tabs gegen Überlappungen/Clipping.
+- Filterbereich entzerrt.
+- Systemstatus-Leiste mit Zustand + Aktivitäts-LEDs für Neon/B2/Tresor/Scheduler/Verify/KC Communication.
+- Klickbare Statusdetails und Statusprüfung.
+- Optionale KC-Communication-Ereignisschnittstelle; Token nur Windows Credential Manager.
+- Ereignis-Sanitizer verhindert Übermittlung von Pfaden, DSNs und geheimen Feldern.
+- Schaltbares Startprotokoll in den Einstellungen.
+- TÜV um Kommunikations-/Protokollprüfungen erweitert.

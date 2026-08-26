@@ -1,0 +1,35 @@
+PC Backup Vault 1.7.0 – Tiefenregression
+========================================
+Datum: 24.08.2026
+
+Ergebnis: PASS
+Pytest: 67/67 PASS
+Python-Kompilierung/AST: PASS
+Signaturen backup_files/run_plan Recovery-Parameter: PASS
+
+Geprüfte Bereiche
+- AES-256-GCM Manipulationsschutz
+- Pfad-HMAC
+- Pause/Fortsetzen/Abbrechen und Hash-Cancel-Checkpoint
+- B2-Objektkeys, Worker-Verschlüsselung, parallele Worker, Workerlimit 1–8
+- kein conn.executemany()-Regression
+- Recovery-Checkpoint Roundtrip, keine Klartextpfade, falscher Schlüssel/Manipulation
+- Single-Instance-Lock
+- KC Machine API Payload, Event-/Prioritätsmapping, Channel-Whitelist, Secret-Filter
+- Recovery-Schemafelder und Architekturregeln
+- Dashboard Lazy-Load, aktueller Tab, INTERRUPTED-Status
+- Backup-Button vier Zustandsfarben
+- UI Recovery-Hooks und Scheduler-Checkpoint
+- Static-Security-Scan: kein eval/exec/shell=True/pickle/marshal, keine eingebettete Neon-DSN/echter npg-Schlüssel
+
+Studio zusätzlich
+- Hauptfenster 6 Statusanzeigen PASS
+- Backup-Button orange/grün/rot/blau PASS
+- One-Touch bei 1200x800 nicht abgeschnitten PASS
+- Dashboard 1400x900 Geometrie PASS
+- Dashboard initial ohne Dateikatalog PASS
+- Inventar lädt Dateikatalog exakt bei Bedarf PASS
+- Mehrstatus-Dashboard mit 7 Statuswerten visuell geprüft PASS
+
+Einschränkung
+Die Labor-/Code-Regression ersetzt keinen physischen Stromausfall während eines realen B2-Uploads auf dem Benutzer-PC. Dieser Feldtest bleibt vor der Aussage „Recovery 100 % feldbewährt“ erforderlich.
