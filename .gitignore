@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+.env
+.env.*
+config.json
+*.sqlite
+*.sqlite3
+*.db
+backups/
+backup/
+runtime/
+logs/
