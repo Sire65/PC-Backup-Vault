@@ -1,6 +1,10 @@
 name: Vollstaendigen 1.7.3 Quellstand herstellen
 
 on:
+  push:
+    branches: [import-1.7.3-clean]
+    paths:
+      - ".github/workflows/materialize-source.yml"
   workflow_dispatch:
 
 permissions:
@@ -10,4 +14,74 @@ jobs:
   materialize:
     runs-on: windows-latest
     steps:
-      - run: echo "Direktimport aktiv; kein Bootstrap-Import mehr."
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verifiziertes Quellarchiv rekonstruieren
+        shell: pwsh
+        run: |
+          $ordered = @(
+            ".verified_source/part00",
+            ".verified_source/part01",
+            ".verified_source/tail02",
+            ".verified_source/part03",
+            ".verified_source/part04",
+            ".verified_source/part05",
+            ".verified_source/part06",
+            ".verified_source/part07",
+            ".verified_source/part08",
+            ".verified_source/part09",
+            ".verified_source/part10",
+            ".verified_source/part11",
+            ".verified_source/part12"
+          )
+          foreach ($p in $ordered) { if (-not (Test-Path $p)) { throw "Quellsegment fehlt: $p" } }
+          $b64 = ""
+          foreach ($p in $ordered) { $b64 += (Get-Content $p -Raw).Trim() }
+          $zip = "pc_backup_vault_1.7.3_source_clean.zip"
+          [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
+          $expectedHash = "7224d7cf3aacc104036d9aec70f236a03cac6d7a56328c3911d186314e4dfc62"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Write-Host "SHA256=$hash"
+          if ($hash -ne $expectedHash) { throw "SHA256 stimmt nicht mit dem geprüften Referenzpaket überein" }
+
+          Remove-Item "_verified_source" -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath "_verified_source" -Force
+          $files = Get-ChildItem "_verified_source" -File -Recurse
+          Write-Host "Extrahierte Quelldateien: $($files.Count)"
+          if ($files.Count -ne 59) { throw "Quellpaket unvollständig: erwartet 59, gefunden $($files.Count)" }
+
+          $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
+          foreach ($name in $required) {
+            if (-not (Test-Path (Join-Path "_verified_source" $name))) { throw "Pflichtdatei fehlt: $name" }
+          }
+          $versionText = Get-Content "_verified_source/NEU_IN_VERSION_1.7.3.txt" -Raw
+          if ($versionText -notmatch "1\.7\.3") { throw "Versionsnachweis 1.7.3 fehlt" }
+
+          Get-ChildItem "_verified_source" -Force | ForEach-Object { Copy-Item $_.FullName -Destination "." -Recurse -Force }
+          $cfg = Get-Content "config_store.py" -Raw
+          $cfg = $cfg -replace 'APP_VERSION\s*=\s*["'']1\.7\.2["'']','APP_VERSION = "1.7.3"'
+          Set-Content "config_store.py" -Value $cfg -Encoding UTF8
+          if ((Get-Content "config_store.py" -Raw) -notmatch 'APP_VERSION\s*=\s*"1\.7\.3"') { throw "Versionskennung konnte nicht auf 1.7.3 gesetzt werden" }
+
+          Remove-Item "_verified_source" -Recurse -Force
+          Remove-Item $zip -Force
+          Remove-Item ".verified_source" -Recurse -Force
+          Remove-Item ".bootstrap" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".exact_source" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".fix" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".source" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".source_upload" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".upload_marker" -Force -ErrorAction SilentlyContinue
+
+      - name: Quellstand committen
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if (git diff --cached --quiet) { Write-Host "Keine Änderungen."; exit 0 }
+          git commit -m "Materialize verified PC Backup Vault 1.7.3 source"
+          git push
