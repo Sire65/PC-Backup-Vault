@@ -2,9 +2,8 @@ name: Vollstaendigen 1.7.3 Quellstand herstellen
 
 on:
   push:
-    branches: [main]
+    branches: [import-1.7.3-clean]
     paths:
-      - ".source/pc_backup_vault_1.7.3_source.zip"
       - ".github/workflows/materialize-source.yml"
   workflow_dispatch:
 
@@ -20,36 +19,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Archiv pruefen und Quellstand herstellen
+      - name: Bootstrap rekonstruieren, pruefen und entpacken
         shell: pwsh
         run: |
-          $zip = ".source/pc_backup_vault_1.7.3_source.zip"
-          if (-not (Test-Path $zip)) { throw "Quellarchiv fehlt: $zip" }
+          $parts = Get-ChildItem ".bootstrap/part*" | Sort-Object Name
+          if ($parts.Count -eq 0) { throw "Bootstrap-Teile fehlen" }
+          $b64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
+          $zip = "pc_backup_vault_1.7.3_source.zip"
+          [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
           $expectedHash = "caf5191fd41d7d52a6eaa880e7ed73a94d2f5ad0d9c8f023e36d136bdc665eba"
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           Write-Host "SHA256=$hash"
           if ($hash -ne $expectedHash) { throw "SHA256 stimmt nicht mit dem Referenzpaket ueberein" }
           Remove-Item "_source" -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path "_source" | Out-Null
           Expand-Archive -Path $zip -DestinationPath "_source" -Force
           $files = Get-ChildItem "_source" -File -Recurse
-          $count = $files.Count
-          Write-Host "Extrahierte Dateien: $count"
-          if ($count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $count" }
+          Write-Host "Extrahierte Dateien: $($files.Count)"
+          if ($files.Count -ne 60) { throw "Quellpaket unvollstaendig: erwartet 60, gefunden $($files.Count)" }
           $required = @("app.py","ui.py","backup_engine.py","config_store.py","kc_communication.py","requirements.txt","schema.sql","NEU_IN_VERSION_1.7.3.txt")
-          foreach ($name in $required) {
-            if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" }
-          }
-          $versionText = Get-Content "_source/NEU_IN_VERSION_1.7.3.txt" -Raw
-          if ($versionText -notmatch "1\.7\.3") { throw "Versionsnachweis 1.7.3 fehlt" }
-          Get-ChildItem "_source" -Force | ForEach-Object {
-            Copy-Item $_.FullName -Destination "." -Recurse -Force
-          }
+          foreach ($name in $required) { if (-not (Test-Path (Join-Path "_source" $name))) { throw "Pflichtdatei fehlt: $name" } }
+          Get-ChildItem "_source" -Force | ForEach-Object { Copy-Item $_.FullName -Destination "." -Recurse -Force }
           Remove-Item "_source" -Recurse -Force
+          Remove-Item $zip -Force
           Remove-Item ".bootstrap" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item ".fix" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".source_parts" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item ".upload_marker" -Force -ErrorAction SilentlyContinue
+          Remove-Item ".exact_source" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".source_upload" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item ".source" -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Quellstand committen
         shell: pwsh
@@ -57,9 +53,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if (git diff --cached --quiet) {
-            Write-Host "Keine Aenderungen."
-            exit 0
-          }
+          if (git diff --cached --quiet) { Write-Host "Keine Aenderungen."; exit 0 }
           git commit -m "Materialize verified PC Backup Vault 1.7.3 source"
           git push
