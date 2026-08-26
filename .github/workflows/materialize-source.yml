@@ -39,7 +39,12 @@ jobs:
           )
           foreach ($p in $ordered) { if (-not (Test-Path $p)) { throw "Quellsegment fehlt: $p" } }
           $b64 = ""
-          foreach ($p in $ordered) { $b64 += (Get-Content $p -Raw).Trim() }
+          foreach ($p in $ordered) {
+            $segment = Get-Content $p -Raw
+            $segment = $segment -replace '\s',''
+            $b64 += $segment
+          }
+          if ($b64 -match '[^A-Za-z0-9+/=]') { throw "Nicht-Base64-Zeichen in Segmentdaten gefunden" }
           $zip = "pc_backup_vault_1.7.3_source_clean.zip"
           [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
           $expectedHash = "7224d7cf3aacc104036d9aec70f236a03cac6d7a56328c3911d186314e4dfc62"
