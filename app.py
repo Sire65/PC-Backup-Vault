@@ -2,6 +2,7 @@ import argparse
 from instance_lock import InstanceLock
 from ui import App
 from plan_runner import run_plan
+from kicc_backup_telemetry import start_backup_telemetry
 
 
 def _show_already_running():
@@ -28,6 +29,8 @@ def main():
         else:
             app = App()
             app._instance_lock = lock
+            # KICC telemetry is observation-only and never participates in backup/restore decisions.
+            app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn)
             app.mainloop()
             lock = None  # App owns/released below only if explicit; process exit releases regardless.
         return 0
