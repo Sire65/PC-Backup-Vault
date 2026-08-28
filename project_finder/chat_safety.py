@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d\s()./-]{7,}\d)(?!\w)")
@@ -32,8 +32,12 @@ def redact_text(text: str) -> str:
 def safe_source_label(path: str, anonymize: bool = True) -> str:
     if not path:
         return ""
-    p = Path(path)
-    return p.name if anonymize else str(p)
+    if not anonymize:
+        return str(Path(path))
+    raw = str(path)
+    if re.match(r"^[A-Za-z]:[\\/]", raw):
+        return PureWindowsPath(raw).name
+    return Path(raw).name
 
 
 def sanitize_finding(row: dict) -> dict:
