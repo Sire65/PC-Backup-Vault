@@ -1,0 +1,2 @@
+Trigger for authoritative 1.7.3 SHA256 reference manifest generation.
+This file has no runtime effect.
