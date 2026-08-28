@@ -9,17 +9,10 @@ from .local_baseline_compare import LocalBaselineResult, compare_local_root, sum
 from .scanner import ScanItem
 from .source_baseline import PC_BACKUP_VAULT_173
 
-
 _REQUIRED = frozenset(PC_BACKUP_VAULT_173.required_files)
 
 
 def candidate_roots_from_scan(items: Iterable[ScanItem]) -> list[str]:
-    """Derive plausible PC Backup Vault source roots from an existing read-only scan.
-
-    A directory is only a candidate when at least three distinct reference files are
-    present. This avoids treating a single copied app.py or README-like file as a
-    source tree. No filesystem mutation is performed.
-    """
     hits: dict[str, set[str]] = {}
     for item in items:
         if item.name not in _REQUIRED:
@@ -34,12 +27,9 @@ def compare_scan_candidates(items: Iterable[ScanItem], *, baseline_hashes: dict[
     return [compare_local_root(root, baseline_hashes=baseline_hashes) for root in candidate_roots_from_scan(rows)]
 
 
-def build_integration_report(
-    items: Iterable[ScanItem],
-    *,
-    baseline_hashes: dict[str, str] | None = None,
-    test_state: str = "NOT_CHECKED",
-) -> dict:
+def build_integration_report(items: Iterable[ScanItem], *, baseline_hashes: dict[str, str] | None = None,
+                             test_state: str = "NOT_CHECKED", full_tree_verified: bool = False) -> dict:
+    """Build a conservative report. Required-file equality is never full-source proof."""
     rows = list(items)
     candidates = compare_scan_candidates(rows, baseline_hashes=baseline_hashes)
     comparison = summarize_candidates(candidates)
@@ -53,37 +43,31 @@ def build_integration_report(
         recovery_state = "LOCAL_REVIEW_REQUIRED"
     elif state_counts.get("COMPARE_REQUIRED"):
         recovery_state = "CONTENT_COMPARE_REQUIRED"
-    elif state_counts.get("MATCH_REFERENCE") and test_state == "PASS":
+    elif state_counts.get("MATCH_REFERENCE") and not full_tree_verified:
+        recovery_state = "FULL_TREE_COMPARE_REQUIRED"
+    elif state_counts.get("MATCH_REFERENCE") and test_state == "PASS" and full_tree_verified:
         recovery_state = "REFERENCE_MATCH_VERIFIED"
     else:
         recovery_state = "TEST_REQUIRED"
 
-    merge_ready = recovery_state == "REFERENCE_MATCH_VERIFIED" and test_state == "PASS"
+    # This is only a candidate for the separate integration gate. It never merges automatically.
+    merge_review_candidate = recovery_state == "REFERENCE_MATCH_VERIFIED" and test_state == "PASS" and full_tree_verified
     return {
-        "schema": "pc-backup-vault.integration-report.v1",
-        "reference": {
-            "version": PC_BACKUP_VAULT_173.version,
-            "commit": PC_BACKUP_VAULT_173.commit_sha,
-            "expected_file_count": PC_BACKUP_VAULT_173.expected_file_count,
-        },
-        "scan": {
-            "file_count": len(rows),
-            "relevant_count": relevant_count,
-            "duplicate_count": duplicate_count,
-            "candidate_root_count": len(candidates),
-        },
+        "schema": "pc-backup-vault.integration-report.v2",
+        "reference": {"version": PC_BACKUP_VAULT_173.version, "commit": PC_BACKUP_VAULT_173.commit_sha,
+                      "expected_file_count": PC_BACKUP_VAULT_173.expected_file_count},
+        "scan": {"file_count": len(rows), "relevant_count": relevant_count, "duplicate_count": duplicate_count,
+                 "candidate_root_count": len(candidates)},
         "candidate_state_counts": dict(sorted(state_counts.items())),
         "candidates": [asdict(x) for x in candidates],
         "comparison": comparison,
         "test_state": test_state,
+        "full_tree_verified": bool(full_tree_verified),
         "recovery_state": recovery_state,
-        "merge_ready": merge_ready,
-        "safety": {
-            "read_only_analysis": True,
-            "automatic_cleanup": False,
-            "automatic_merge": False,
-            "local_newer_or_diverged_protected": True,
-        },
+        "merge_review_candidate": merge_review_candidate,
+        "merge_ready": False,
+        "safety": {"read_only_analysis": True, "automatic_cleanup": False, "automatic_merge": False,
+                   "integration_gate_required": True, "local_newer_or_diverged_protected": True},
         "next_action": _next_action(recovery_state),
     }
 
@@ -93,6 +77,7 @@ def _next_action(state: str) -> str:
         "NO_SOURCE_CANDIDATE": "Weitere Laufwerke/Ordner scannen; kein vollständiger Quellkandidat erkannt.",
         "LOCAL_REVIEW_REQUIRED": "Abweichende/lokal andere Kandidaten schützen und vollständig gegen Git vergleichen.",
         "CONTENT_COMPARE_REQUIRED": "Per-Datei-Hashes der Referenz laden und vollständigen Inhaltsvergleich durchführen.",
+        "FULL_TREE_COMPARE_REQUIRED": "Alle Referenzpfade und Dateiinhalte vollständig vergleichen; Pflichtdateien allein reichen nicht.",
         "TEST_REQUIRED": "Kandidat strukturell prüfen und vollständige Regression ausführen.",
-        "REFERENCE_MATCH_VERIFIED": "Nur Merge-Prüfung freigeben; kein automatischer Merge oder Release.",
+        "REFERENCE_MATCH_VERIFIED": "An separaten Integrations-/TÜV-Gate übergeben; kein automatischer Merge oder Release.",
     }.get(state, "Manuelle Prüfung erforderlich.")
