@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from typing import Iterable
+
+from .project_names import canonical_project
 
 STOP = {
     "aber", "auch", "dann", "dass", "eine", "einer", "einen", "einem", "eines",
@@ -20,15 +21,12 @@ def tokens(text: str) -> list[str]:
 def match_requirement(requirement: str, evidence_texts: Iterable[str], *, min_distinct: int = 2) -> dict:
     """Return conservative lexical evidence for one requirement.
 
-    This is deliberately not semantic proof. FOUND requires multiple distinctive
-    requirement terms in one technical evidence text. MISSING is only returned
-    when evidence was actually supplied and none matched; otherwise NOT_CHECKED.
+    FOUND is only lexical evidence, never implementation proof by itself. The
+    reconciliation layer still requires green tests and a safe local/Git relation.
     """
     req = list(dict.fromkeys(tokens(requirement)))
     evidence = [str(x) for x in evidence_texts if str(x).strip()]
-    if not evidence:
-        return {"state": "NOT_CHECKED", "score": 0, "matched_terms": [], "evidence_index": None}
-    if not req:
+    if not evidence or not req:
         return {"state": "NOT_CHECKED", "score": 0, "matched_terms": [], "evidence_index": None}
 
     best = (0, [], None)
@@ -46,13 +44,19 @@ def match_requirement(requirement: str, evidence_texts: Iterable[str], *, min_di
 
 
 def annotate_findings(findings: Iterable[dict], evidence_by_project: dict[str, Iterable[str]]) -> list[dict]:
+    normalized_evidence = {canonical_project(k): v for k, v in evidence_by_project.items()}
     rows = []
     for finding in findings:
         row = dict(finding)
-        project = str(row.get("project") or "")
-        result = match_requirement(str(row.get("text") or row.get("title") or ""), evidence_by_project.get(project, ()))
+        project = canonical_project(row.get("project"))
+        row["project"] = project
+        result = match_requirement(
+            str(row.get("text") or row.get("title") or ""),
+            normalized_evidence.get(project, ()),
+        )
         row["git_requirement_match"] = result["state"]
         row["git_requirement_match_score"] = result["score"]
         row["git_requirement_match_terms"] = result["matched_terms"]
+        row["git_requirement_match_evidence_index"] = result["evidence_index"]
         rows.append(row)
     return rows
