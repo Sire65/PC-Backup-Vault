@@ -73,8 +73,7 @@ def _conversation_messages(conv: dict) -> list[ChatMessage]:
             message = node.get("message")
             if not isinstance(message, dict):
                 continue
-            content = message.get("content")
-            texts = list(_iter_text(content))
+            texts = list(_iter_text(message.get("content")))
             author = message.get("author") if isinstance(message.get("author"), dict) else {}
             role = str(author.get("role") or message.get("role") or "unknown")
             timestamp = message.get("create_time") or message.get("update_time")
@@ -87,7 +86,8 @@ def _conversation_messages(conv: dict) -> list[ChatMessage]:
             for idx, item in enumerate(raw):
                 if isinstance(item, dict):
                     texts = list(_iter_text(item))
-                    role = str(item.get("role") or (item.get("author") or {}).get("role") if isinstance(item.get("author"), dict) else item.get("role") or "unknown")
+                    author = item.get("author") if isinstance(item.get("author"), dict) else {}
+                    role = str(item.get("role") or author.get("role") or "unknown")
                     timestamp = item.get("create_time") or item.get("timestamp") or item.get("update_time")
                     mid = str(item.get("id") or f"{key}-{idx}")
                     for text in texts:
@@ -111,10 +111,13 @@ def _project_scores(text: str) -> dict[str, int]:
 def classify_conversation(title: str, messages: list[ChatMessage] | list[str]) -> tuple[str, int]:
     texts = [m.text if isinstance(m, ChatMessage) else str(m) for m in messages[:200]]
     corpus = (title + "\n" + "\n".join(texts)).lower()
+    title_project_score = sum(_project_scores(title).values())
     project_score = sum(_project_scores(corpus).values())
     dev_score = len(DEV_PATTERNS.findall(corpus))
-    score = project_score * 4 + min(dev_score, 20)
-    if score >= 12:
+    score = project_score * 4 + min(dev_score, 20) + min(title_project_score * 4, 12)
+    # A clearly named KC project plus multiple technical development terms is
+    # strong enough evidence even in a short conversation.
+    if score >= 12 or (title_project_score > 0 and dev_score >= 2):
         return "DEVELOPMENT", score
     if score >= 5:
         return "POSSIBLE_DEVELOPMENT", score
@@ -141,15 +144,13 @@ def analyze_conversation(conv: dict, *, redact: bool = True) -> dict:
         if not projects:
             continue
         project = max(projects, key=projects.get)
-        emitted: set[str] = set()
         for kind, pattern, strength in kinds:
-            if kind not in emitted and pattern.search(msg.text):
+            if pattern.search(msg.text):
                 findings.append(ChatFinding(
                     cid, msg.message_id, msg.role, title,
                     msg.timestamp or (str(conv_timestamp) if conv_timestamp is not None else None),
                     project, kind, redact_text(msg.text[:2000]) if redact else msg.text[:2000], strength,
                 ))
-                emitted.add(kind)
 
     return {
         "conversation_id": cid,
