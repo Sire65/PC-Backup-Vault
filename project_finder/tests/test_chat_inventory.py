@@ -34,6 +34,10 @@ class ChatInventoryTests(unittest.TestCase):
         self.assertEqual(decide_status(item).status, "YELLOW")
         item.git_evidence = "FOUND"
         item.test_evidence = "PASS"
+        # A green Git test alone is not enough until the local-vs-Git relation
+        # is known. This prevents overwriting a newer local development state.
+        self.assertEqual(decide_status(item).status, "YELLOW")
+        item.local_git_relation = "SAME"
         self.assertEqual(decide_status(item).status, "GREEN")
 
     def test_lost_local_development_is_red(self):
