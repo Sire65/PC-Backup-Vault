@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from typing import Iterable
 
 from .development_center import DevelopmentItem, decide_status
 from .git_inventory import RepoSnapshot
+from .project_names import canonical_project
 
 
 CHAT_KIND_TO_CLAIM = {
@@ -20,32 +21,38 @@ def _requirement_text(row: dict) -> str:
     return text[:500] or str(row.get("title") or "Unbenannter Fund")
 
 
+def _repo_snapshot(raw: RepoSnapshot | dict) -> RepoSnapshot:
+    if isinstance(raw, RepoSnapshot):
+        raw.project = canonical_project(raw.project)
+        return raw
+    allowed = {x.name for x in fields(RepoSnapshot)}
+    clean = {k: v for k, v in dict(raw).items() if k in allowed}
+    clean["project"] = canonical_project(clean.get("project") or clean.get("repository"))
+    clean.setdefault("repository", str(raw.get("repository") or ""))
+    return RepoSnapshot(**clean)
+
+
 def reconcile_evidence(
     chat_findings: Iterable[dict],
     repo_rows: Iterable[RepoSnapshot | dict],
     local_projects: Iterable[dict] = (),
 ) -> dict:
-    """Combine chat evidence, Git state, local scan state and tests.
-
-    Project-level repository presence is never treated as proof that a concrete
-    requirement exists in code. Exact source references are retained so every
-    dashboard row can be traced back to the chat finding that created it.
-    """
+    """Combine chat, Git, local and test evidence without optimistic inference."""
     repos: dict[str, RepoSnapshot] = {}
     for raw in repo_rows:
-        repo = raw if isinstance(raw, RepoSnapshot) else RepoSnapshot(**raw)
+        repo = _repo_snapshot(raw)
         repos[repo.project] = repo
 
     local: dict[str, dict] = {}
-    for row in local_projects:
-        project = str(row.get("project") or "")
-        if project:
-            local[project] = dict(row)
+    for raw in local_projects:
+        row = dict(raw)
+        project = canonical_project(row.get("project"))
+        if project != "Unbekannt":
+            local[project] = row
 
     items: list[DevelopmentItem] = []
-    details: list[dict] = []
     for finding in chat_findings:
-        project = str(finding.get("project") or "Unbekannt")
+        project = canonical_project(finding.get("project"))
         claim = CHAT_KIND_TO_CLAIM.get(str(finding.get("kind") or ""), "UNKNOWN")
         repo = repos.get(project)
         loc = local.get(project, {})
@@ -67,7 +74,7 @@ def reconcile_evidence(
             test_evidence = repo.latest_test or "NOT_CHECKED"
             build_evidence = "FOUND" if (repo.version or repo.build or repo.head_sha) else "NOT_CHECKED"
 
-        item = decide_status(DevelopmentItem(
+        item = DevelopmentItem(
             project=project,
             requirement=_requirement_text(finding),
             chat_claim=claim,
@@ -76,28 +83,13 @@ def reconcile_evidence(
             test_evidence=test_evidence,
             local_git_relation=local_relation,
             build_evidence=build_evidence,
-        ))
-        items.append(item)
-        details.append({
-            "project": project,
-            "requirement": item.requirement,
-            "status": item.status,
-            "reason": item.reason,
-            "chat_claim": item.chat_claim,
-            "git_evidence": item.git_evidence,
-            "local_evidence": item.local_evidence,
-            "test_evidence": item.test_evidence,
-            "build_evidence": item.build_evidence,
-            "local_git_relation": item.local_git_relation,
-            "source": {
-                "conversation_id": str(finding.get("conversation_id") or ""),
-                "message_id": str(finding.get("message_id") or ""),
-                "title": str(finding.get("title") or ""),
-                "timestamp": finding.get("timestamp"),
-                "kind": str(finding.get("kind") or ""),
-                "evidence_strength": str(finding.get("evidence_strength") or ""),
-            },
-        })
+            source_conversation_id=str(finding.get("conversation_id") or ""),
+            source_message_id=str(finding.get("message_id") or ""),
+            source_title=str(finding.get("title") or ""),
+            source_kind=str(finding.get("kind") or ""),
+            source_evidence_strength=str(finding.get("evidence_strength") or ""),
+        )
+        items.append(decide_status(item))
 
     counts = {"GREEN": 0, "YELLOW": 0, "RED": 0, "BLUE": 0}
     for item in items:
@@ -107,16 +99,6 @@ def reconcile_evidence(
         "schema": "pc-backup-vault.evidence-reconciliation.v2",
         "counts": counts,
         "items": [asdict(x) for x in items],
-        "details": details,
-        "evidence": {
-            "chat_findings": len(items),
-            "git_projects": len(repos),
-            "local_projects": len(local),
-        },
-        "trust": {
-            "chat_claims_are_not_proof": True,
-            "project_repo_presence_is_not_requirement_proof": True,
-            "source_traceability": True,
-        },
-        "rule": "Projekt in Git gefunden bedeutet nicht automatisch, dass eine konkrete Chat-Anforderung umgesetzt ist. GREEN braucht Anforderungsnachweis plus grüne Tests und darf keinen neueren/abweichenden lokalen Stand haben.",
+        "evidence": {"chat_findings": len(items), "git_projects": len(repos), "local_projects": len(local)},
+        "rule": "Git-Projekt allein beweist keine konkrete Anforderung. GREEN braucht expliziten Anforderungsnachweis, PASS und keinen neueren/abweichenden lokalen Stand.",
     }
