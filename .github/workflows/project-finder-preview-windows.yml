@@ -1,0 +1,61 @@
+name: Project Finder Windows Preview
+
+on:
+  push:
+    branches:
+      - feature/project-finder-safe-cleanup
+    paths:
+      - 'project_finder/**'
+      - 'PROJECT_FINDER_VORSCHAU.py'
+      - '.github/workflows/project-finder-preview-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile Project Finder
+        run: python -m compileall -q project_finder
+
+      - name: Run Project Finder unit tests
+        run: python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
+
+      - name: Install preview packager
+        run: python -m pip install --disable-pip-version-check pyinstaller
+
+      - name: Build Windows preview
+        run: >-
+          pyinstaller --noconfirm --clean --windowed
+          --name PC-Backup-Vault-ProjectFinder-Vorschau
+          PROJECT_FINDER_VORSCHAU.py
+
+      - name: Add preview notice
+        shell: pwsh
+        run: |
+          @'
+          PC Backup Vault - Project-Finder Vorschau
+          =========================================
+          Dies ist eine isolierte Sichtungs-/Entwicklungsversion.
+          Sie ersetzt die vorhandene PC-Backup-Vault-Installation nicht.
+          Start: PC-Backup-Vault-ProjectFinder-Vorschau.exe
+          '@ | Set-Content -Encoding UTF8 'dist/PC-Backup-Vault-ProjectFinder-Vorschau/LESE_MICH.txt'
+
+      - name: Upload Windows preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC-Backup-Vault-ProjectFinder-Vorschau-Windows
+          path: dist/PC-Backup-Vault-ProjectFinder-Vorschau/
+          if-no-files-found: error
+          retention-days: 14
