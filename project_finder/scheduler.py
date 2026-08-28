@@ -15,6 +15,7 @@ class ScheduleSpec:
     start_time: str = '02:00'
     days: str = 'MON,TUE,WED,THU,FRI,SAT,SUN'
     enabled: bool = True
+    runner_executable: str | None = None
 
 
 def save_profile(path: str, *, name: str, roots: list[str], output_root: str | None = None,
@@ -41,21 +42,39 @@ def save_profile(path: str, *, name: str, roots: list[str], output_root: str | N
     return str(p)
 
 
-def _task_command(profile_file: str) -> str:
-    python = Path(sys.executable)
-    return f'"{python}" -m project_finder.job_runner --profile "{Path(profile_file)}"'
+def resolve_runner_command(profile_file: str, runner_executable: str | None = None, *, frozen: bool | None = None) -> str:
+    """Return a stable Task Scheduler command.
+
+    Source/Python mode can invoke the module directly. A packaged build must use
+    a dedicated runner EXE; the backup GUI is never assumed to understand runner
+    arguments, preventing scheduled tasks from opening or misusing the GUI.
+    """
+    profile = Path(profile_file)
+    is_frozen = bool(getattr(sys, 'frozen', False)) if frozen is None else bool(frozen)
+    if runner_executable:
+        runner = Path(runner_executable)
+        return f'"{runner}" --profile "{profile}"'
+    if not is_frozen:
+        python = Path(sys.executable)
+        return f'"{python}" -m project_finder.job_runner --profile "{profile}"'
+
+    sibling = Path(sys.executable).with_name('PC-Backup-Vault-ProjectFinder-Runner.exe')
+    if sibling.exists():
+        return f'"{sibling}" --profile "{profile}"'
+    raise RuntimeError(
+        'Für geplante Analysen im EXE-Betrieb fehlt der dedizierte ProjektFinder-Runner. '
+        'Die Backup-GUI wird aus Sicherheitsgründen nicht als Job-Runner verwendet.'
+    )
 
 
 def create_windows_task(spec: ScheduleSpec) -> dict:
-    """Create/update a Windows Task Scheduler entry using schtasks.
-
-    Scheduled jobs are analysis-only. They never invoke quarantine or permanent deletion.
-    """
+    """Create/update a Windows Task Scheduler entry for analysis-only jobs."""
     cadence = spec.cadence.upper()
     if cadence not in {'DAILY', 'WEEKLY', 'ONCE'}:
         raise ValueError('cadence muss DAILY, WEEKLY oder ONCE sein')
     task_name = f'PC Backup Vault - ProjektFinder - {spec.name}'
-    cmd = ['schtasks', '/Create', '/F', '/TN', task_name, '/TR', _task_command(spec.profile_file), '/ST', spec.start_time]
+    task_command = resolve_runner_command(spec.profile_file, spec.runner_executable)
+    cmd = ['schtasks', '/Create', '/F', '/TN', task_name, '/TR', task_command, '/ST', spec.start_time]
     if cadence == 'DAILY':
         cmd += ['/SC', 'DAILY']
     elif cadence == 'WEEKLY':
@@ -67,7 +86,7 @@ def create_windows_task(spec: ScheduleSpec) -> dict:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or 'Task Scheduler Fehler')
     if not spec.enabled:
         subprocess.run(['schtasks', '/Change', '/TN', task_name, '/DISABLE'], capture_output=True, text=True, shell=False)
-    return {'task_name': task_name, 'spec': asdict(spec), 'result': proc.stdout.strip()}
+    return {'task_name': task_name, 'spec': asdict(spec), 'result': proc.stdout.strip(), 'runner': task_command}
 
 
 def run_windows_task_now(name: str) -> dict:
