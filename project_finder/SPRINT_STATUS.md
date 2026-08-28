@@ -53,13 +53,21 @@ Stand: Feature-Branch `feature/project-finder-safe-cleanup`. `main` bleibt unver
 - Lease/Heartbeat/Terminalstatus gegen doppelte Ausführung
 - Zielgerätbindung
 
-## Sprint 7 – Git / Update-Verteilung
-**Status: Modell vorhanden / Programmintegration offen**
-- Git-Inventur
-- Update-Bereitschaft
-- Update-Plan mit Test-/Local-Newer-/Diverged-Sperren
-- Rollback-Präferenz
-- noch keine pauschale Aktivierung in bestehenden Programmen, solange deren führender Quellstand nicht eindeutig ist
+## Sprint 7 – Git / Update-Verteilung & Recovery
+**Status: Sicherheitsmodell umgesetzt / Programmintegration nach Quellstand-Abgleich**
+- Git-Inventur und Update-Bereitschaft
+- eindeutiger Ziel-Commit erforderlich
+- grüne Tests erforderlich
+- lokaler Git-Vergleich zwingend: MATCH oder GIT_NEWER
+- LOCAL_NEWER wird als mögliche Entwicklung geschützt und blockiert Updates
+- DIVERGED erzwingt Vergleich und blockiert Updates
+- versionierte Download-/Release-Quelle erforderlich
+- CURRENT wird von READY unterschieden
+- Recovery-Entscheidung getrennt von Update-Bereitschaft
+- kein stilles automatisches Installieren
+- kein Überschreiben lokaler neuerer/abweichender Entwicklung
+- Rollback wird bevorzugt
+- Aktivierung in bestehenden Programmen erst nach eindeutiger Bestimmung ihres führenden Quellstands
 
 ## Sprint 8 – Integration, TÜV, Regression, Übergabe
 **Status: bewusst gesperrt bis Quellstand-Abgleich**
