@@ -27,10 +27,9 @@ def reconcile_evidence(
 ) -> dict:
     """Combine chat evidence, Git state, local scan state and tests.
 
-    This function does not infer that similarly named files contain a requirement.
-    It only attaches project-level technical evidence. Requirement-level GREEN is
-    therefore conservative and still requires explicit Git evidence supplied by a
-    later code matcher.
+    Project-level repository presence is never treated as proof that a concrete
+    requirement exists in code. Exact source references are retained so every
+    dashboard row can be traced back to the chat finding that created it.
     """
     repos: dict[str, RepoSnapshot] = {}
     for raw in repo_rows:
@@ -44,14 +43,13 @@ def reconcile_evidence(
             local[project] = dict(row)
 
     items: list[DevelopmentItem] = []
+    details: list[dict] = []
     for finding in chat_findings:
         project = str(finding.get("project") or "Unbekannt")
         claim = CHAT_KIND_TO_CLAIM.get(str(finding.get("kind") or ""), "UNKNOWN")
         repo = repos.get(project)
         loc = local.get(project, {})
 
-        # Project-level repo presence alone is not proof that this exact requirement
-        # exists in code. An explicit requirement_match can upgrade it to FOUND.
         requirement_match = str(finding.get("git_requirement_match") or "NOT_CHECKED")
         git_evidence = requirement_match if requirement_match in {"FOUND", "MISSING"} else "NOT_CHECKED"
         if not repo and git_evidence == "NOT_CHECKED":
@@ -69,7 +67,7 @@ def reconcile_evidence(
             test_evidence = repo.latest_test or "NOT_CHECKED"
             build_evidence = "FOUND" if (repo.version or repo.build or repo.head_sha) else "NOT_CHECKED"
 
-        item = DevelopmentItem(
+        item = decide_status(DevelopmentItem(
             project=project,
             requirement=_requirement_text(finding),
             chat_claim=claim,
@@ -78,21 +76,47 @@ def reconcile_evidence(
             test_evidence=test_evidence,
             local_git_relation=local_relation,
             build_evidence=build_evidence,
-        )
-        items.append(decide_status(item))
+        ))
+        items.append(item)
+        details.append({
+            "project": project,
+            "requirement": item.requirement,
+            "status": item.status,
+            "reason": item.reason,
+            "chat_claim": item.chat_claim,
+            "git_evidence": item.git_evidence,
+            "local_evidence": item.local_evidence,
+            "test_evidence": item.test_evidence,
+            "build_evidence": item.build_evidence,
+            "local_git_relation": item.local_git_relation,
+            "source": {
+                "conversation_id": str(finding.get("conversation_id") or ""),
+                "message_id": str(finding.get("message_id") or ""),
+                "title": str(finding.get("title") or ""),
+                "timestamp": finding.get("timestamp"),
+                "kind": str(finding.get("kind") or ""),
+                "evidence_strength": str(finding.get("evidence_strength") or ""),
+            },
+        })
 
     counts = {"GREEN": 0, "YELLOW": 0, "RED": 0, "BLUE": 0}
     for item in items:
         counts[item.status] = counts.get(item.status, 0) + 1
 
     return {
-        "schema": "pc-backup-vault.evidence-reconciliation.v1",
+        "schema": "pc-backup-vault.evidence-reconciliation.v2",
         "counts": counts,
         "items": [asdict(x) for x in items],
+        "details": details,
         "evidence": {
             "chat_findings": len(items),
             "git_projects": len(repos),
             "local_projects": len(local),
+        },
+        "trust": {
+            "chat_claims_are_not_proof": True,
+            "project_repo_presence_is_not_requirement_proof": True,
+            "source_traceability": True,
         },
         "rule": "Projekt in Git gefunden bedeutet nicht automatisch, dass eine konkrete Chat-Anforderung umgesetzt ist. GREEN braucht Anforderungsnachweis plus grüne Tests und darf keinen neueren/abweichenden lokalen Stand haben.",
     }
