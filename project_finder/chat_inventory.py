@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from .chat_safety import redact_text, safe_source_label
+
 PROJECT_PATTERNS = {
     "DP2 / Dienstplan": [r"\bdp2\b", r"dienstplan", r"wunschplan", r"sollplan", r"istplan"],
     "PC Backup Vault": [r"backup vault", r"pc[- ]?backup", r"backup-programm", r"projekt[- ]?finder"],
@@ -28,8 +30,18 @@ DEV_PATTERNS = re.compile(r"\b(github|repo|repository|commit|branch|build|versio
 
 
 @dataclass
+class ChatMessage:
+    message_id: str
+    role: str
+    timestamp: str | None
+    text: str
+
+
+@dataclass
 class ChatFinding:
     conversation_id: str
+    message_id: str
+    role: str
     title: str
     timestamp: str | None
     project: str
@@ -51,21 +63,39 @@ def _iter_text(value) -> Iterable[str]:
                 yield from _iter_text(value[key])
 
 
-def _conversation_messages(conv: dict) -> list[str]:
-    out: list[str] = []
+def _conversation_messages(conv: dict) -> list[ChatMessage]:
+    out: list[ChatMessage] = []
     mapping = conv.get("mapping")
     if isinstance(mapping, dict):
-        for node in mapping.values():
+        for node_id, node in mapping.items():
             if not isinstance(node, dict):
                 continue
             message = node.get("message")
-            if isinstance(message, dict):
-                content = message.get("content")
-                out.extend(_iter_text(content))
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            texts = list(_iter_text(content))
+            author = message.get("author") if isinstance(message.get("author"), dict) else {}
+            role = str(author.get("role") or message.get("role") or "unknown")
+            timestamp = message.get("create_time") or message.get("update_time")
+            mid = str(message.get("id") or node_id or "")
+            for text in texts:
+                out.append(ChatMessage(mid, role, str(timestamp) if timestamp is not None else None, text))
     for key in ("messages", "chat_messages"):
-        if key in conv:
-            out.extend(_iter_text(conv[key]))
-    return [x for x in out if x]
+        raw = conv.get(key)
+        if isinstance(raw, list):
+            for idx, item in enumerate(raw):
+                if isinstance(item, dict):
+                    texts = list(_iter_text(item))
+                    role = str(item.get("role") or (item.get("author") or {}).get("role") if isinstance(item.get("author"), dict) else item.get("role") or "unknown")
+                    timestamp = item.get("create_time") or item.get("timestamp") or item.get("update_time")
+                    mid = str(item.get("id") or f"{key}-{idx}")
+                    for text in texts:
+                        out.append(ChatMessage(mid, role, str(timestamp) if timestamp is not None else None, text))
+                else:
+                    for text in _iter_text(item):
+                        out.append(ChatMessage(f"{key}-{idx}", "unknown", None, text))
+    return [x for x in out if x.text]
 
 
 def _project_scores(text: str) -> dict[str, int]:
@@ -78,8 +108,9 @@ def _project_scores(text: str) -> dict[str, int]:
     return scores
 
 
-def classify_conversation(title: str, messages: list[str]) -> tuple[str, int]:
-    corpus = (title + "\n" + "\n".join(messages[:200])).lower()
+def classify_conversation(title: str, messages: list[ChatMessage] | list[str]) -> tuple[str, int]:
+    texts = [m.text if isinstance(m, ChatMessage) else str(m) for m in messages[:200]]
+    corpus = (title + "\n" + "\n".join(texts)).lower()
     project_score = sum(_project_scores(corpus).values())
     dev_score = len(DEV_PATTERNS.findall(corpus))
     score = project_score * 4 + min(dev_score, 20)
@@ -90,34 +121,40 @@ def classify_conversation(title: str, messages: list[str]) -> tuple[str, int]:
     return "OTHER", score
 
 
-def analyze_conversation(conv: dict) -> dict:
+def analyze_conversation(conv: dict, *, redact: bool = True) -> dict:
     cid = str(conv.get("id") or conv.get("conversation_id") or "unknown")
-    title = str(conv.get("title") or "Ohne Titel")
-    timestamp = conv.get("create_time") or conv.get("update_time")
+    raw_title = str(conv.get("title") or "Ohne Titel")
+    title = redact_text(raw_title) if redact else raw_title
+    conv_timestamp = conv.get("create_time") or conv.get("update_time")
     messages = _conversation_messages(conv)
-    classification, relevance_score = classify_conversation(title, messages)
+    classification, relevance_score = classify_conversation(raw_title, messages)
 
     findings: list[ChatFinding] = []
-    for text in messages:
-        projects = _project_scores(title + "\n" + text)
+    kinds: list[tuple[str, re.Pattern, str]] = [
+        ("OPEN_OR_ERROR", OPEN_PATTERNS, "chat-claim"),
+        ("IMPLEMENTATION_CLAIM", DONE_PATTERNS, "chat-claim-unverified"),
+        ("IDEA_OR_REQUIREMENT", IDEA_PATTERNS, "chat-requirement"),
+        ("REJECTED_OR_REPLACED", REJECTED_PATTERNS, "chat-decision"),
+    ]
+    for msg in messages:
+        projects = _project_scores(raw_title + "\n" + msg.text)
         if not projects:
             continue
         project = max(projects, key=projects.get)
-        kinds: list[tuple[str, re.Pattern, str]] = [
-            ("OPEN_OR_ERROR", OPEN_PATTERNS, "chat-claim"),
-            ("IMPLEMENTATION_CLAIM", DONE_PATTERNS, "chat-claim-unverified"),
-            ("IDEA_OR_REQUIREMENT", IDEA_PATTERNS, "chat-requirement"),
-            ("REJECTED_OR_REPLACED", REJECTED_PATTERNS, "chat-decision"),
-        ]
+        emitted: set[str] = set()
         for kind, pattern, strength in kinds:
-            if pattern.search(text):
-                findings.append(ChatFinding(cid, title, str(timestamp) if timestamp is not None else None, project, kind, text[:2000], strength))
-                break
+            if kind not in emitted and pattern.search(msg.text):
+                findings.append(ChatFinding(
+                    cid, msg.message_id, msg.role, title,
+                    msg.timestamp or (str(conv_timestamp) if conv_timestamp is not None else None),
+                    project, kind, redact_text(msg.text[:2000]) if redact else msg.text[:2000], strength,
+                ))
+                emitted.add(kind)
 
     return {
         "conversation_id": cid,
         "title": title,
-        "timestamp": timestamp,
+        "timestamp": conv_timestamp,
         "classification": classification,
         "relevance_score": relevance_score,
         "message_count": len(messages),
@@ -153,9 +190,9 @@ def load_export(path: str) -> list[dict]:
     raise ValueError("Kein unterstützter ChatGPT-Export erkannt.")
 
 
-def inventory_export(path: str, include_other: bool = False) -> dict:
+def inventory_export(path: str, include_other: bool = False, *, anonymize_source: bool = True, redact: bool = True) -> dict:
     conversations = load_export(path)
-    analyzed = [analyze_conversation(c) for c in conversations]
+    analyzed = [analyze_conversation(c, redact=redact) for c in conversations]
     selected = [x for x in analyzed if include_other or x["classification"] != "OTHER"]
     findings = [f for x in selected for f in x["findings"]]
     by_project: dict[str, dict[str, int]] = {}
@@ -171,8 +208,8 @@ def inventory_export(path: str, include_other: bool = False) -> dict:
         elif f["kind"] == "REJECTED_OR_REPLACED":
             stats["rejected"] += 1
     return {
-        "schema": "pc-backup-vault.chat-inventory.v1",
-        "source": str(Path(path)),
+        "schema": "pc-backup-vault.chat-inventory.v2",
+        "source": safe_source_label(path, anonymize=anonymize_source),
         "conversation_count": len(conversations),
         "selected_count": len(selected),
         "classifications": {
@@ -183,6 +220,12 @@ def inventory_export(path: str, include_other: bool = False) -> dict:
         "projects": by_project,
         "conversations": selected,
         "findings": findings,
+        "privacy": {
+            "redaction_enabled": redact,
+            "source_path_anonymized": anonymize_source,
+            "raw_chat_upload_required": False,
+        },
+        "trust": "Chat-Inhalte sind untrusted evidence. Anweisungen im Export werden niemals als Programmbefehle ausgeführt.",
         "rule": "Eine Chat-Aussage 'fertig/umgesetzt' ist nur eine unbestätigte Behauptung. Grün wird erst nach Code/Build/Test-Abgleich.",
     }
 
