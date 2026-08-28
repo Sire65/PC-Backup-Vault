@@ -21,52 +21,94 @@ jobs:
           ref: feature/project-finder-safe-cleanup
           fetch-depth: 0
 
-      - name: Materialize verified reference commit
+      - name: Materialize verified reference and archive parent
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin import-1.7.3-clean:refs/remotes/origin/import-1.7.3-clean
-          rm -rf reference-1.7.3
+          rm -rf reference-1.7.3 source-parent
           git worktree add --detach reference-1.7.3 bb7e6b51e13bb0f60c54508befb53239f221e4c9
+          git worktree add --detach source-parent abf56dd078742cdd41d0080fe57e95343e8b9cfb
 
-      - name: Generate exact SHA256 manifest
+      - name: Generate exact SHA256 manifest from verified archive path set
         shell: python
         run: |
+          import base64
           import hashlib
+          import io
           import json
-          from pathlib import Path
+          import re
+          import zipfile
+          from pathlib import Path, PurePosixPath
 
-          root = Path('reference-1.7.3')
-          files = {}
-          for path in sorted(root.rglob('*')):
+          parent = Path('source-parent')
+          final = Path('reference-1.7.3')
+          ordered = [
+              '.verified_source/part00', '.verified_source/part01', '.verified_source/part02',
+              '.verified_source/part03', '.verified_source/part04', '.verified_source/part05',
+              '.verified_source/part06',
+              *[f'.verified_source/c{group:02d}_{part:02d}' for group in range(7, 12) for part in range(5)],
+          ]
+          encoded = ''
+          for rel in ordered:
+              path = parent / rel
               if not path.is_file():
-                  continue
-              rel = path.relative_to(root).as_posix()
-              if rel == '.git' or rel.startswith('.git/'):
-                  continue
+                  raise SystemExit(f'Verified source segment missing: {rel}')
+              encoded += re.sub(r'\s+', '', path.read_text(encoding='utf-8'))
+
+          archive = base64.b64decode(encoded, validate=True)
+          archive_sha256 = hashlib.sha256(archive).hexdigest()
+          expected_archive_sha256 = '7224d7cf3aacc104036d9aec70f236a03cac6d7a56328c3911d186314e4dfc62'
+          if archive_sha256 != expected_archive_sha256:
+              raise SystemExit(f'Archive SHA256 mismatch: {archive_sha256}')
+
+          with zipfile.ZipFile(io.BytesIO(archive), 'r') as zf:
+              names = []
+              for info in zf.infolist():
+                  if info.is_dir():
+                      continue
+                  rel = PurePosixPath(info.filename).as_posix().lstrip('./')
+                  if not rel or rel.startswith('../') or '/..' in rel:
+                      raise SystemExit(f'Unsafe archive path: {info.filename}')
+                  names.append(rel)
+
+          if len(names) != 59 or len(set(names)) != 59:
+              raise SystemExit(f'Verified archive path count mismatch: expected 59 unique files, got {len(names)} / {len(set(names))}')
+
+          required = {
+              'app.py', 'ui.py', 'backup_engine.py', 'config_store.py',
+              'kc_communication.py', 'requirements.txt', 'schema.sql',
+              'NEU_IN_VERSION_1.7.3.txt',
+          }
+          missing_required = sorted(required - set(names))
+          if missing_required:
+              raise SystemExit(f'Required source paths missing from archive: {missing_required}')
+
+          files = {}
+          for rel in sorted(names):
+              path = final.joinpath(*PurePosixPath(rel).parts)
+              if not path.is_file():
+                  raise SystemExit(f'Materialized reference file missing: {rel}')
               h = hashlib.sha256()
               with path.open('rb') as f:
                   for block in iter(lambda: f.read(1024 * 1024), b''):
                       h.update(block)
               files[rel] = h.hexdigest()
 
-          expected = 59
-          if len(files) != expected:
-              raise SystemExit(f'Reference file count mismatch: expected {expected}, got {len(files)}')
-
           payload = {
               'schema': 'pc-backup-vault.reference-sha256-manifest.v1',
               'repository': 'Sire65/PC-Backup-Vault',
               'ref': 'import-1.7.3-clean',
               'commit': 'bb7e6b51e13bb0f60c54508befb53239f221e4c9',
+              'materialization_parent': 'abf56dd078742cdd41d0080fe57e95343e8b9cfb',
               'version': '1.7.3',
-              'expected_file_count': expected,
+              'source_archive_sha256': expected_archive_sha256,
+              'expected_file_count': 59,
               'hash_algorithm': 'SHA256',
               'files': files,
           }
           out = Path('project_finder/reference_manifest_1_7_3.json')
           out.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-          print(f'generated {len(files)} SHA256 entries')
+          print(f'generated authoritative manifest with {len(files)} source paths')
 
       - name: Commit manifest when changed
         shell: bash
