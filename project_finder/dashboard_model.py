@@ -4,6 +4,18 @@ from collections import Counter, defaultdict
 from typing import Iterable
 
 
+def _project_status(row: dict) -> str:
+    if row["red"]:
+        return "RED"
+    if row["yellow"]:
+        return "YELLOW"
+    if row["green"] and not row["yellow"] and not row["red"]:
+        return "GREEN"
+    if row["blue"] and not row["green"]:
+        return "BLUE"
+    return "YELLOW"
+
+
 def build_dashboard(*, scan_items: Iterable | None = None, chat_inventory: dict | None = None, development_summary: dict | None = None) -> dict:
     scan_items = list(scan_items or [])
     chat_inventory = chat_inventory or {}
@@ -28,6 +40,8 @@ def build_dashboard(*, scan_items: Iterable | None = None, chat_inventory: dict 
     project_rows = defaultdict(lambda: {
         "project": "", "chat_findings": 0, "ideas": 0, "claims": 0,
         "open": 0, "rejected": 0, "green": 0, "yellow": 0, "red": 0, "blue": 0,
+        "git_found": 0, "local_found": 0, "tests_pass": 0, "tests_fail": 0,
+        "local_newer": 0, "diverged": 0, "status": "YELLOW",
     })
     for project, stats in projects.items():
         row = project_rows[project]
@@ -45,15 +59,30 @@ def build_dashboard(*, scan_items: Iterable | None = None, chat_inventory: dict 
         status = str(item.get("status") or "YELLOW").lower()
         if status in {"green", "yellow", "red", "blue"}:
             row[status] += 1
+        if item.get("git_evidence") == "FOUND":
+            row["git_found"] += 1
+        if item.get("local_evidence") == "FOUND":
+            row["local_found"] += 1
+        if item.get("test_evidence") == "PASS":
+            row["tests_pass"] += 1
+        if item.get("test_evidence") == "FAIL":
+            row["tests_fail"] += 1
+        if item.get("local_git_relation") == "LOCAL_NEWER":
+            row["local_newer"] += 1
+        if item.get("local_git_relation") == "DIVERGED":
+            row["diverged"] += 1
+
+    for row in project_rows.values():
+        row["status"] = _project_status(row)
 
     priorities = sorted(
         project_rows.values(),
-        key=lambda r: (r["red"] * 8 + r["open"] * 4 + r["yellow"] * 2 + r["chat_findings"]),
+        key=lambda r: (r["red"] * 8 + r["tests_fail"] * 8 + r["local_newer"] * 7 + r["diverged"] * 7 + r["open"] * 4 + r["yellow"] * 2 + r["chat_findings"]),
         reverse=True,
     )
 
     return {
-        "schema": "pc-backup-vault.project-dashboard.v1",
+        "schema": "pc-backup-vault.project-dashboard.v2",
         "kpi": {
             "files": len(scan_items),
             "bytes": total_bytes,
@@ -69,8 +98,16 @@ def build_dashboard(*, scan_items: Iterable | None = None, chat_inventory: dict 
             "proven_percent": proven_pct,
             "open_or_lost": dev_counts["RED"],
             "needs_review": dev_counts["YELLOW"],
+            "projects_red": sum(1 for x in project_rows.values() if x["status"] == "RED"),
+            "projects_yellow": sum(1 for x in project_rows.values() if x["status"] == "YELLOW"),
+            "projects_green": sum(1 for x in project_rows.values() if x["status"] == "GREEN"),
         },
         "file_categories": dict(categories),
         "development": dev_counts,
         "projects": priorities,
+        "trust": {
+            "real_data_only": True,
+            "chat_claims_are_not_proof": True,
+            "green_requires_technical_evidence": True,
+        },
     }
