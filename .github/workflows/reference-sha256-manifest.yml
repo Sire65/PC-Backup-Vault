@@ -1,0 +1,83 @@
+name: Build verified 1.7.3 SHA256 manifest
+
+on:
+  push:
+    branches:
+      - feature/project-finder-safe-cleanup
+    paths:
+      - '.github/workflows/reference-sha256-manifest.yml'
+      - 'project_finder/REFERENCE_MANIFEST_TRIGGER.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  build-reference-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/project-finder-safe-cleanup
+          fetch-depth: 0
+
+      - name: Materialize verified reference commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin import-1.7.3-clean:refs/remotes/origin/import-1.7.3-clean
+          rm -rf reference-1.7.3
+          git worktree add --detach reference-1.7.3 bb7e6b51e13bb0f60c54508befb53239f221e4c9
+
+      - name: Generate exact SHA256 manifest
+        shell: python
+        run: |
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('reference-1.7.3')
+          files = {}
+          for path in sorted(root.rglob('*')):
+              if not path.is_file():
+                  continue
+              rel = path.relative_to(root).as_posix()
+              if rel == '.git' or rel.startswith('.git/'):
+                  continue
+              h = hashlib.sha256()
+              with path.open('rb') as f:
+                  for block in iter(lambda: f.read(1024 * 1024), b''):
+                      h.update(block)
+              files[rel] = h.hexdigest()
+
+          expected = 59
+          if len(files) != expected:
+              raise SystemExit(f'Reference file count mismatch: expected {expected}, got {len(files)}')
+
+          payload = {
+              'schema': 'pc-backup-vault.reference-sha256-manifest.v1',
+              'repository': 'Sire65/PC-Backup-Vault',
+              'ref': 'import-1.7.3-clean',
+              'commit': 'bb7e6b51e13bb0f60c54508befb53239f221e4c9',
+              'version': '1.7.3',
+              'expected_file_count': expected,
+              'hash_algorithm': 'SHA256',
+              'files': files,
+          }
+          out = Path('project_finder/reference_manifest_1_7_3.json')
+          out.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(f'generated {len(files)} SHA256 entries')
+
+      - name: Commit manifest when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add project_finder/reference_manifest_1_7_3.json
+          if git diff --cached --quiet; then
+            echo 'Manifest unchanged.'
+            exit 0
+          fi
+          git commit -m 'Record verified 1.7.3 SHA256 source manifest'
+          git push origin HEAD:feature/project-finder-safe-cleanup
