@@ -1,28 +1,30 @@
+import unittest
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from project_finder.scheduler import resolve_runner_command
 
 
-def test_source_mode_uses_python_module_runner():
-    cmd = resolve_runner_command(r"C:\Jobs\nacht.json", frozen=False)
-    assert "-m project_finder.job_runner" in cmd
-    assert "nacht.json" in cmd
+class SchedulerTests(unittest.TestCase):
+    def test_source_mode_uses_python_module_runner(self):
+        cmd = resolve_runner_command(r"C:\Jobs\nacht.json", frozen=False)
+        self.assertIn("-m project_finder.job_runner", cmd)
+        self.assertIn("nacht.json", cmd)
+
+    def test_explicit_runner_is_used_in_packaged_mode(self):
+        cmd = resolve_runner_command(
+            r"C:\Jobs\nacht.json",
+            r"C:\Program Files\PC Backup Vault\ProjectFinderRunner.exe",
+            frozen=True,
+        )
+        self.assertIn("ProjectFinderRunner.exe", cmd)
+        self.assertIn("--profile", cmd)
+
+    def test_packaged_mode_never_falls_back_to_backup_gui(self):
+        with patch.object(Path, "exists", return_value=False):
+            with self.assertRaises(RuntimeError):
+                resolve_runner_command(r"C:\Jobs\nacht.json", frozen=True)
 
 
-def test_explicit_runner_is_used_in_packaged_mode():
-    cmd = resolve_runner_command(
-        r"C:\Jobs\nacht.json",
-        r"C:\Program Files\PC Backup Vault\ProjectFinderRunner.exe",
-        frozen=True,
-    )
-    assert "ProjectFinderRunner.exe" in cmd
-    assert "--profile" in cmd
-
-
-def test_packaged_mode_never_falls_back_to_backup_gui():
-    with patch.object(Path, "exists", return_value=False):
-        with pytest.raises(RuntimeError):
-            resolve_runner_command(r"C:\Jobs\nacht.json", frozen=True)
+if __name__ == "__main__":
+    unittest.main()
