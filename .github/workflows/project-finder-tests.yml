@@ -36,7 +36,7 @@ jobs:
       - name: Run cloud contract regression
         run: |
           if [ -f tests/test_project_finder_cloud_contract.py ]; then
-            python -m unittest tests.test_project_finder_cloud_contract -v
+            python -m unittest discover -s tests -p 'test_project_finder_cloud_contract.py' -v
           else
             echo 'Cloud contract regression file not present; skipped.'
           fi
