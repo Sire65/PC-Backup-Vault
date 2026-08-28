@@ -14,7 +14,8 @@ class ChatSafetyTests(unittest.TestCase):
         self.assertNotIn("sk-abcdefghijklmnop", cleaned)
 
     def test_source_path_anonymized_by_default(self):
-        self.assertEqual(safe_source_label(r"C:\\Users\\Max\\Downloads\\export.zip"), "C:\\Users\\Max\\Downloads\\export.zip" if __import__('os').name != 'nt' else 'export.zip')
+        self.assertEqual(safe_source_label(r"C:\Users\Max\Downloads\export.zip"), "export.zip")
+        self.assertEqual(safe_source_label("/home/max/Downloads/export.zip"), "export.zip")
 
     def test_message_role_and_id_are_preserved_as_evidence(self):
         conv = {
