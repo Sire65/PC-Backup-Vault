@@ -6,6 +6,7 @@ from .development_dashboard import DevelopmentDashboard
 from .ui_changes import ChangesSinceLastTab
 from .ui_git_status import GitStatusTab
 from .ui_job_history import JobHistoryTab
+from .ui_source_candidates import SourceCandidatesTab
 from .ui_tab import ProjectFinderTab
 
 
@@ -37,10 +38,12 @@ class ProjectInventoryWorkspace(ttk.Frame):
         )
         self.changes = ChangesSinceLastTab(self.notebook)
         self.git_status = GitStatusTab(self.notebook, get_rows=get_git_rows)
+        self.source_candidates = SourceCandidatesTab(self.notebook, get_scan_items=lambda: self.finder.items)
         self.job_history = JobHistoryTab(self.notebook, output_root=job_output_root)
 
         self.notebook.add(self.dashboard, text="Übersicht")
         self.notebook.add(self.finder, text="Festplatten-Analyse")
+        self.notebook.add(self.source_candidates, text="Quellstand-Kandidaten")
         self.notebook.add(self.changes, text="Neu seit letzter Analyse")
         self.notebook.add(self.git_status, text="Git / Updates")
         self.notebook.add(self.job_history, text="Planjobs / Verlauf")
@@ -51,5 +54,7 @@ class ProjectInventoryWorkspace(ttk.Frame):
         current = self.notebook.nametowidget(self.notebook.select())
         if current is self.git_status:
             self.git_status.refresh()
+        elif current is self.source_candidates:
+            self.source_candidates.refresh()
         elif current is self.job_history:
             self.job_history.refresh()
