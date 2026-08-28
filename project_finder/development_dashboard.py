@@ -9,6 +9,9 @@ from .chat_inventory import inventory_export, save_inventory
 from .dashboard_model import build_dashboard
 
 
+STATUS_SYMBOL = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴", "BLUE": "🔵"}
+
+
 class DevelopmentDashboard(ttk.Frame):
     """Compact dashboard for file/chat/development inventory.
 
@@ -22,7 +25,8 @@ class DevelopmentDashboard(ttk.Frame):
         self.chat_inventory: dict = {}
         self.status = StringVar(value="Bereit · Noch kein ChatGPT-Export eingelesen")
         self.kpi_vars = {k: StringVar(value="–") for k in (
-            "files", "data", "projects", "chats", "findings", "proven", "open", "duplicates"
+            "files", "data", "projects", "chats", "findings", "proven", "open", "duplicates",
+            "green_projects", "yellow_projects", "red_projects"
         )}
         self._build()
         self.refresh()
@@ -41,6 +45,7 @@ class DevelopmentDashboard(ttk.Frame):
         specs = [
             ("Dateien", "files"), ("Datenmenge", "data"), ("Projekte", "projects"), ("Entwicklungs-Chats", "chats"),
             ("Chat-Funde", "findings"), ("Nachgewiesen", "proven"), ("Offen/verloren", "open"), ("Dubletten", "duplicates"),
+            ("🟢 Projekte", "green_projects"), ("🟡 Projekte", "yellow_projects"), ("🔴 Projekte", "red_projects"),
         ]
         for idx, (title, key) in enumerate(specs):
             box = ttk.LabelFrame(kpis, text=title)
@@ -54,17 +59,22 @@ class DevelopmentDashboard(ttk.Frame):
         self.file_canvas = Canvas(middle, height=150, highlightthickness=0)
         self.file_canvas.pack(side=LEFT, fill=BOTH, expand=True, padx=(5, 0))
 
-        tablebox = ttk.LabelFrame(self, text="Projektübersicht · zuerst die wichtigsten offenen Punkte")
+        tablebox = ttk.LabelFrame(self, text="Projektübersicht · kritische/unklare Projekte zuerst")
         tablebox.pack(fill=BOTH, expand=True, padx=10, pady=(4, 10))
-        cols = ("project", "findings", "ideas", "claims", "open", "green", "yellow", "red")
+        cols = ("status", "project", "findings", "git", "local", "tests", "local_newer", "diverged", "green", "yellow", "red")
         self.tree = ttk.Treeview(tablebox, columns=cols, show="headings", height=12)
         labels = {
-            "project": "Projekt", "findings": "Chat-Funde", "ideas": "Ideen", "claims": "Umsetzung behauptet",
-            "open": "Chat offen/Fehler", "green": "🟢 belegt", "yellow": "🟡 prüfen", "red": "🔴 offen/verloren",
+            "status": "Ampel", "project": "Projekt", "findings": "Chat-Funde", "git": "Git belegt",
+            "local": "Lokal belegt", "tests": "Tests grün", "local_newer": "Lokal neuer", "diverged": "Abweichend",
+            "green": "🟢 belegt", "yellow": "🟡 prüfen", "red": "🔴 kritisch",
         }
-        widths = {"project": 240, "findings": 90, "ideas": 70, "claims": 135, "open": 115, "green": 80, "yellow": 80, "red": 110}
+        widths = {
+            "status": 58, "project": 220, "findings": 80, "git": 75, "local": 80, "tests": 75,
+            "local_newer": 78, "diverged": 78, "green": 70, "yellow": 70, "red": 70,
+        }
         for c in cols:
-            self.tree.heading(c, text=labels[c]); self.tree.column(c, width=widths[c], anchor="w" if c == "project" else "center")
+            self.tree.heading(c, text=labels[c])
+            self.tree.column(c, width=widths[c], anchor="w" if c == "project" else "center")
         self.tree.pack(fill=BOTH, expand=True, padx=6, pady=6)
 
     @staticmethod
@@ -116,12 +126,17 @@ class DevelopmentDashboard(ttk.Frame):
             "chats": f"{k['chats_development']:,} + {k['chats_possible']:,}?", "findings": f"{k['chat_findings']:,}",
             "proven": f"{k['proven_percent']:.1f}%", "open": f"{k['open_or_lost']:,}",
             "duplicates": f"{k['duplicates']:,} · {self._fmt_size(k['duplicate_bytes'])}",
+            "green_projects": f"{k['projects_green']:,}", "yellow_projects": f"{k['projects_yellow']:,}",
+            "red_projects": f"{k['projects_red']:,}",
         }
         for key, value in values.items(): self.kpi_vars[key].set(value)
 
         self.tree.delete(*self.tree.get_children())
         for r in model["projects"]:
-            self.tree.insert("", END, values=(r["project"], r["chat_findings"], r["ideas"], r["claims"], r["open"], r["green"], r["yellow"], r["red"]))
+            self.tree.insert("", END, values=(
+                STATUS_SYMBOL.get(r["status"], "🟡"), r["project"], r["chat_findings"], r["git_found"],
+                r["local_found"], r["tests_pass"], r["local_newer"], r["diverged"], r["green"], r["yellow"], r["red"]
+            ))
         self._draw_bars(self.dev_canvas, "Entwicklungsstand", model["development"], ["GREEN", "YELLOW", "RED", "BLUE"])
         self._draw_bars(self.file_canvas, "Dateitypen", model["file_categories"], list(model["file_categories"].keys())[:6])
 
