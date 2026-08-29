@@ -36,7 +36,7 @@ jobs:
 
       - name: Integrierten Quellstand kompilieren
         shell: pwsh
-        run: python -m compileall -q app.py project_finder
+        run: python -m compileall -q app.py auto_updater.py update_ui.py project_finder
 
       - name: PC Backup Vault bauen
         shell: pwsh
@@ -46,7 +46,7 @@ jobs:
       - name: Portables Windows-Paket erstellen
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.7.3_Windows_Portable.zip" -Force
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.8.0_Windows_Portable.zip" -Force
 
       - name: Inno Setup installieren
         shell: pwsh
@@ -56,20 +56,24 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
-          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.7.3_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
+          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.8.0_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
+          $hash = (Get-FileHash "installer\output\PC_Backup_Vault_1.8.0_Setup.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  PC_Backup_Vault_1.8.0_Setup.exe" | Set-Content -Encoding ascii "installer\output\PC_Backup_Vault_1.8.0_Setup.exe.sha256"
 
       - name: Windows Installer bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.7.3_Setup
-          path: installer/output/PC_Backup_Vault_1.7.3_Setup.exe
+          name: PC_Backup_Vault_1.8.0_Setup
+          path: |
+            installer/output/PC_Backup_Vault_1.8.0_Setup.exe
+            installer/output/PC_Backup_Vault_1.8.0_Setup.exe.sha256
           if-no-files-found: error
           retention-days: 30
 
       - name: Portable Version bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.7.3_Windows_Portable
-          path: PC_Backup_Vault_1.7.3_Windows_Portable.zip
+          name: PC_Backup_Vault_1.8.0_Windows_Portable
+          path: PC_Backup_Vault_1.8.0_Windows_Portable.zip
           if-no-files-found: error
           retention-days: 30
