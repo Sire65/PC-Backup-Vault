@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -9,10 +10,17 @@ from config_store import APP_VERSION
 from interrupted_recovery import clear_checkpoint, save_manual_checkpoint, update_job_id
 from kc_backup_engine_adapter import execute_prepared_backup, prepare_one_touch_backup
 from kc_backup_job_store import load_jobs, save_jobs
-from kc_backup_program_registry import default_registry
-from kc_backup_program_status import load_program_statuses, record_program_failure, record_program_success
+from kc_backup_program_registry import default_registry, resolve_program_scope
+from kc_backup_program_status import (
+    load_program_statuses,
+    record_program_failure,
+    record_program_success,
+    record_program_verify,
+)
 from kc_backup_program_store import load_program_registry
 from kc_backup_programs_ui import KCProgramsWindow
+from kc_backup_scheduler import ScheduleAction
+from kc_backup_scheduler_runtime import claim_dispatch, due_dispatches, mark_dispatch
 from kc_backup_scheduler_ui import BackupSchedulerWindow
 from verification import verify_job
 
@@ -110,6 +118,12 @@ def enable_backup_central(App):
     def _scheduler_path(self):
         return self.store.path.parent / "KC_BACKUP_SCHEDULER_JOBS.json"
 
+    def _scheduler_runtime_path(self):
+        return self.store.path.parent / "KC_BACKUP_SCHEDULER_RUNTIME.json"
+
+    def _program_store_path(self):
+        return self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
+
     def _program_status_path(self):
         return self.store.path.parent / "KC_BACKUP_PROGRAM_STATUS.json"
 
@@ -122,7 +136,7 @@ def enable_backup_central(App):
         )
 
     def open_kc_programs(self):
-        path = self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
+        path = self._kc_program_store_path()
         try:
             registry = load_program_registry(path, default_registry())
             runtime_statuses = load_program_statuses(self._kc_program_status_path())
@@ -155,10 +169,25 @@ def enable_backup_central(App):
             scheduler_jobs=scheduler_jobs,
         )
 
-    def secure_one_touch(self, program_id="pc-backup-vault"):
+    def _finish_scheduled(self, dispatch, state: str, message: str | None = None):
+        if dispatch is None:
+            return
+        try:
+            mark_dispatch(
+                self._kc_scheduler_runtime_path(),
+                dispatch,
+                state=state,
+                now=datetime.now().astimezone(),
+                message=message,
+            )
+        except Exception:
+            pass
+
+    def secure_one_touch(self, program_id="pc-backup-vault", scheduler_dispatch=None):
         if getattr(self, "_backup_running", False):
             return
         if not self.selected:
+            self._kc_finish_scheduled(scheduler_dispatch, "BLOCKED", "Keine sicherungsfähige Quelle ausgewählt")
             messagebox.showwarning(
                 "One-Touch",
                 "Bitte zuerst Dateien oder einen Ordner auswählen.\n\nDanach reicht ein Klick auf One-Touch.",
@@ -169,6 +198,7 @@ def enable_backup_central(App):
         dsn = self.active_dsn()
         key = self.master_key()
         if not profile or not dsn or not key:
+            self._kc_finish_scheduled(scheduler_dispatch, "BLOCKED", "Datenbankzugang oder Tresorschlüssel fehlt")
             messagebox.showwarning("One-Touch", "Datenbankzugang oder lokaler Tresorschlüssel fehlt.", parent=self)
             return
 
@@ -186,6 +216,8 @@ def enable_backup_central(App):
             payload_target=payload,
         )
         if not prepared.allowed:
+            reason = "; ".join(prepared.blockers)
+            self._kc_finish_scheduled(scheduler_dispatch, "BLOCKED", reason)
             messagebox.showwarning(
                 "One-Touch – Probelauf blockiert",
                 "Es wurde nichts gesichert.\n\n" + "\n".join(f"• {item}" for item in prepared.blockers),
@@ -193,6 +225,7 @@ def enable_backup_central(App):
             )
             return
 
+        self._kc_finish_scheduled(scheduler_dispatch, "RUNNING")
         paths = list(prepared.paths)
         total_bytes = sum((p.stat().st_size for p in paths if p.exists()), 0)
         save_manual_checkpoint(key, paths, prepared.backup_mode, prepared.payload_target, None)
@@ -243,6 +276,7 @@ def enable_backup_central(App):
                         job_id=str(job_id or ""),
                         verify_status=verify_result,
                     )
+                self._kc_finish_scheduled(scheduler_dispatch, "SUCCESS", f"Backup {job_id} + FULL Verify PASS")
                 self.after(0, lambda: self.lbl_progress.config(text=f"One-Touch {program_id} abgeschlossen: Sicherung + FULL-Verify erfolgreich."))
                 try:
                     from ui import JobReportWindow
@@ -260,11 +294,13 @@ def enable_backup_central(App):
                 self.after(0, self.refresh_system_status)
             except BackupCancelled:
                 clear_checkpoint()
+                self._kc_finish_scheduled(scheduler_dispatch, "FAILED", "Sicherung abgebrochen")
                 self.after(0, lambda: self.lbl_progress.config(text="One-Touch abgebrochen – unvollständiger Lauf bereinigt."))
                 self.after(0, lambda: messagebox.showinfo("One-Touch", "One-Touch wurde sicher abgebrochen.", parent=self))
             except (LimitBlocked, ChristmasGuard) as exc:
                 clear_checkpoint()
                 msg = str(exc)
+                self._kc_finish_scheduled(scheduler_dispatch, "BLOCKED", msg)
                 if program_id != "pc-backup-vault":
                     try: record_program_failure(self._kc_program_status_path(), program_id=program_id, error=msg)
                     except Exception: pass
@@ -272,6 +308,7 @@ def enable_backup_central(App):
             except Exception as exc:
                 clear_checkpoint()
                 msg = str(exc)
+                self._kc_finish_scheduled(scheduler_dispatch, "FAILED", msg)
                 if program_id != "pc-backup-vault":
                     try: record_program_failure(self._kc_program_status_path(), program_id=program_id, error=msg)
                     except Exception: pass
@@ -281,6 +318,105 @@ def enable_backup_central(App):
                 self.after(0, lambda: self._set_backup_running(False))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _run_scheduled_verify(self, dispatch):
+        try:
+            statuses = load_program_statuses(self._kc_program_status_path())
+            status = statuses.get(dispatch.program_id)
+            if not status or not status.last_job_id:
+                self._kc_finish_scheduled(dispatch, "BLOCKED", "Kein bestätigter Backup-Job für Vollprüfung vorhanden")
+                return
+            dsn = self.active_dsn()
+            key = self.master_key()
+            if not dsn or not key:
+                self._kc_finish_scheduled(dispatch, "BLOCKED", "Datenbankzugang oder Tresorschlüssel fehlt")
+                return
+            b2_cfg = self.store.get_b2_runtime_config()
+            control = self._begin_backup_control()
+            self._kc_finish_scheduled(dispatch, "RUNNING")
+
+            def cb(done, total, message, metrics=None):
+                self.after(0, lambda: self._progress(done, total, message, metrics))
+
+            def work():
+                try:
+                    verification = verify_job(
+                        dsn,
+                        key,
+                        status.last_job_id,
+                        mode="FULL",
+                        object_store_config=b2_cfg,
+                        progress=cb,
+                        control=control,
+                        app_version=APP_VERSION,
+                    )
+                    result = str(getattr(verification, "result", "") or "").upper()
+                    if result != "PASS":
+                        raise RuntimeError(f"FULL-Verify Ergebnis: {result or 'UNBEKANNT'}")
+                    record_program_verify(self._kc_program_status_path(), program_id=dispatch.program_id, verify_status="PASS")
+                    self._kc_finish_scheduled(dispatch, "SUCCESS", f"FULL Verify PASS für {status.last_job_id}")
+                    self.notify_kc(
+                        "backup_verify_success",
+                        "Geplante Vollprüfung erfolgreich",
+                        f"{dispatch.program_id}: Backup-Job {status.last_job_id} wurde vollständig geprüft.",
+                        "INFO",
+                        {"program_id": dispatch.program_id, "job_id": status.last_job_id, "verify": "FULL"},
+                    )
+                except Exception as exc:
+                    msg = str(exc)
+                    try: record_program_verify(self._kc_program_status_path(), program_id=dispatch.program_id, verify_status="FAIL", error=msg)
+                    except Exception: pass
+                    self._kc_finish_scheduled(dispatch, "FAILED", msg)
+                    self.notify_kc("backup_verify_failed", "Geplante Vollprüfung fehlgeschlagen", msg, "ERROR", {"program_id": dispatch.program_id})
+                finally:
+                    self.after(0, lambda: self._set_backup_running(False))
+
+            threading.Thread(target=work, daemon=True).start()
+        except Exception as exc:
+            self._kc_finish_scheduled(dispatch, "FAILED", str(exc))
+
+    def _scheduler_tick(self):
+        try:
+            if getattr(self, "_backup_running", False):
+                return
+            jobs = load_jobs(self._kc_scheduler_path())
+            now = datetime.now().astimezone()
+            for dispatch in due_dispatches(jobs, now=now):
+                if not claim_dispatch(self._kc_scheduler_runtime_path(), dispatch, now=now):
+                    continue
+                if dispatch.action == ScheduleAction.BACKUP:
+                    try:
+                        registry = load_program_registry(self._kc_program_store_path(), default_registry())
+                        program = registry.get(dispatch.program_id)
+                        scope = resolve_program_scope(program)
+                    except Exception as exc:
+                        self._kc_finish_scheduled(dispatch, "BLOCKED", f"Programm nicht sicher auflösbar: {exc}")
+                        continue
+                    if not scope.ready:
+                        reason = "; ".join(scope.blockers) or "Sicherungsumfang nicht bereit"
+                        self._kc_finish_scheduled(dispatch, "BLOCKED", reason)
+                        try: record_program_failure(self._kc_program_status_path(), program_id=dispatch.program_id, error=reason)
+                        except Exception: pass
+                        continue
+                    self.selected = collect_paths([str(path) for path in scope.paths])
+                    self._refresh_tree()
+                    self.update_backup_recommendation()
+                    self._update_backup_button_state()
+                    self.run_default_one_touch(program_id=dispatch.program_id, scheduler_dispatch=dispatch)
+                    break
+                if dispatch.action == ScheduleAction.VERIFY:
+                    self._kc_run_scheduled_verify(dispatch)
+                    break
+        except Exception as exc:
+            try:
+                self.notify_kc("backup_scheduler_error", "Backup-Scheduler Fehler", str(exc), "ERROR")
+            except Exception:
+                pass
+        finally:
+            try:
+                self.after(60_000, self._kc_scheduler_tick)
+            except Exception:
+                pass
 
     def build_with_backup_central(self):
         original_build(self)
@@ -292,9 +428,15 @@ def enable_backup_central(App):
             calendar_button = ttk.Button(status_button.master, text="🗓 Backup-Kalender", command=self.open_backup_calendar)
             calendar_button.pack(side="right", padx=(0, 8))
             self.btn_backup_calendar = calendar_button
+        self.after(5_000, self._kc_scheduler_tick)
 
     App._kc_scheduler_path = _scheduler_path
+    App._kc_scheduler_runtime_path = _scheduler_runtime_path
+    App._kc_program_store_path = _program_store_path
     App._kc_program_status_path = _program_status_path
+    App._kc_finish_scheduled = _finish_scheduled
+    App._kc_run_scheduled_verify = _run_scheduled_verify
+    App._kc_scheduler_tick = _scheduler_tick
     App.open_backup_calendar = open_backup_calendar
     App.open_kc_programs = open_kc_programs
     App.run_default_one_touch = secure_one_touch
