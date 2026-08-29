@@ -14,54 +14,32 @@ from typing import Callable, Iterable, Optional
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico'}
 DOCUMENT_EXTS = {'.md', '.txt', '.pdf', '.docx', '.xlsx', '.pptx', '.csv'}
-INTERESTING_EXTS = {
-    '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz',
-    '.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql',
-    '.exe', '.msi', '.bat', '.cmd', '.ps1',
-    *IMAGE_EXTS, *DOCUMENT_EXTS,
-}
+INTERESTING_EXTS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql', '.exe', '.msi', '.bat', '.cmd', '.ps1', *IMAGE_EXTS, *DOCUMENT_EXTS}
 SOURCE_EXTS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql'}
 ARCHIVE_EXTS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'}
-PROJECT_WORDS = (
-    'kc', 'dienstplan', 'dp2', 'dp3', 'kasse', 'marktkasse', 'manager', 'verwaltung',
-    'futura', 'communication', 'backup', 'vault', 'money', 'butler', 'leitstand',
-    'weihnacht', 'wm-', 'wm_', 'inventar', 'bilderkasse', 'bilderrechner',
-    'assets', 'asset', 'images', 'bilder', 'pos', 'pc-manager',
-)
+PROJECT_WORDS = ('kc', 'dienstplan', 'dp2', 'dp3', 'kasse', 'marktkasse', 'manager', 'verwaltung', 'futura', 'communication', 'backup', 'vault', 'money', 'butler', 'leitstand', 'weihnacht', 'wm-', 'wm_', 'inventar', 'bilderkasse', 'bilderrechner', 'assets', 'asset', 'images', 'bilder', 'pos', 'pc-manager')
 VERSION_RE = re.compile(r'(?<!\d)(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[-_.][a-z0-9]+)?)', re.I)
 COPY_WORDS = ('copy', 'kopie', 'alt', 'old', 'backup', 'bak', 'temp', 'tmp', 'test', 'neu', 'new', 'final')
 TEMP_PARTS = {'tmp', 'temp', 'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
 STRONG_TEMP_PARTS = {'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
 SYSTEM_DIRS = {'$RECYCLE.BIN', 'System Volume Information'}
-
+# Generated/vendor trees are deliberately excluded from productive inventory.  These
+# directories are reproducible runtime/dependency output, not user project source.
+DEFAULT_EXCLUDED_DIRS = {
+    '_internal', 'node_modules', '__pycache__', '.venv', 'venv', 'dist', 'build',
+    '.pytest_cache', '.mypy_cache', '.ruff_cache', '.tox', '.nox', '.cache',
+    'coverage', 'htmlcov', '.parcel-cache', '.next', '.nuxt', 'target',
+}
 
 @dataclass
 class ScanItem:
-    path: str
-    name: str
-    extension: str
-    size: int
-    modified: float
-    modified_iso: str
-    score: int
-    category: str
-    version_hint: str = ''
-    sha256: str = ''
-    duplicate_of: str = ''
-    status: str = 'WHITE'
-    reason: str = ''
+    path: str; name: str; extension: str; size: int; modified: float; modified_iso: str; score: int; category: str
+    version_hint: str = ''; sha256: str = ''; duplicate_of: str = ''; status: str = 'WHITE'; reason: str = ''
 
-
-def _iso(ts: float) -> str:
-    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
-
-
-def _version_hint(name: str) -> str:
-    m = VERSION_RE.search(name)
-    return m.group(1) if m else ''
-
-
-def _score(path: Path, size: int) -> tuple[int, str, str]:
+def _iso(ts): return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
+def _version_hint(name):
+    m = VERSION_RE.search(name); return m.group(1) if m else ''
+def _score(path, size):
     low = str(path).lower(); ext = path.suffix.lower(); score = 0; reasons = []
     if ext in INTERESTING_EXTS: score += 20; reasons.append('relevanter Dateityp')
     if any(w in low for w in PROJECT_WORDS): score += 35; reasons.append('Projektbegriff/-ordner')
@@ -72,199 +50,128 @@ def _score(path: Path, size: int) -> tuple[int, str, str]:
     if any(w in path.name.lower() for w in COPY_WORDS): score += 5; reasons.append('Versions-/Kopiehinweis')
     if size == 0: score -= 20; reasons.append('leer')
     return max(0, min(score, 100)), ', '.join(reasons), _version_hint(path.name)
-
-
-def _category(ext: str) -> str:
+def _category(ext):
     if ext in ARCHIVE_EXTS: return 'archive'
     if ext in SOURCE_EXTS: return 'source'
     if ext in IMAGE_EXTS: return 'image_asset'
     if ext in DOCUMENT_EXTS: return 'document'
     if ext in {'.exe', '.msi', '.bat', '.cmd', '.ps1'}: return 'binary_or_launcher'
     return 'other'
-
-
-def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    h = hashlib.sha256()
+def sha256_file(path, chunk_size=1024*1024):
+    h=hashlib.sha256()
     with path.open('rb') as f:
         while True:
-            b = f.read(chunk_size)
+            b=f.read(chunk_size)
             if not b: break
             h.update(b)
     return h.hexdigest()
-
-
-def _normalized_parts(path: str) -> list[str]:
-    return [p.lower() for p in str(path).replace('\\', '/').split('/') if p]
-
-
-def _canonical_rank(item: ScanItem) -> tuple[int, int, int, int, str]:
-    parts = _normalized_parts(item.path)
-    parent = parts[-2] if len(parts) >= 2 else ''
-    strong_temp_penalty = 1 if any(p in STRONG_TEMP_PARTS for p in parts) else 0
-    weak_temp_penalty = 1 if parent in {'tmp', 'temp'} else 0
-    copy_penalty = 1 if any(w in item.name.lower() for w in COPY_WORDS) else 0
-    return (strong_temp_penalty, weak_temp_penalty, copy_penalty, -int(item.score), item.path.lower())
-
-
-def _assign_duplicate_groups(items: list[ScanItem]) -> None:
-    groups: dict[str, list[ScanItem]] = defaultdict(list)
+def _normalized_parts(path): return [p.lower() for p in str(path).replace('\\','/').split('/') if p]
+def _canonical_rank(item):
+    parts=_normalized_parts(item.path); parent=parts[-2] if len(parts)>=2 else ''
+    return (1 if any(p in STRONG_TEMP_PARTS for p in parts) else 0, 1 if parent in {'tmp','temp'} else 0, 1 if any(w in item.name.lower() for w in COPY_WORDS) else 0, -int(item.score), item.path.lower())
+def _assign_duplicate_groups(items):
+    groups=defaultdict(list)
     for item in items:
-        if item.sha256:
-            groups[item.sha256].append(item)
+        if item.sha256: groups[item.sha256].append(item)
     for group in groups.values():
-        if len(group) < 2:
-            continue
-        canonical = min(group, key=_canonical_rank)
+        if len(group)<2: continue
+        canonical=min(group,key=_canonical_rank)
         for item in group:
-            if item is canonical:
-                item.duplicate_of = ''
-                if 'bit-identische Dublette' in item.reason:
-                    item.reason = item.reason.replace(', bit-identische Dublette', '').replace('bit-identische Dublette', '').strip(', ')
-                continue
-            item.duplicate_of = canonical.path
-            item.status = 'BLUE'
-            if 'bit-identische Dublette' not in item.reason:
-                item.reason = (item.reason + ', ' if item.reason else '') + 'bit-identische Dublette'
-
-
-def count_scan_files(roots: Iterable[str], *, include_hidden: bool = False,
-                     progress: Optional[Callable[[int, str], None]] = None,
-                     stop_requested: Optional[Callable[[], bool]] = None) -> int:
-    """Read-only pre-count used for a determinate progress bar and ETA."""
-    count = 0
+            if item is canonical: item.duplicate_of=''; continue
+            item.duplicate_of=canonical.path; item.status='BLUE'
+            if 'bit-identische Dublette' not in item.reason: item.reason=(item.reason+', ' if item.reason else '')+'bit-identische Dublette'
+def _filter_dirnames(dirnames, include_hidden):
+    excluded={x.lower() for x in DEFAULT_EXCLUDED_DIRS}
+    return [d for d in dirnames if d.lower() not in excluded and d not in SYSTEM_DIRS and (include_hidden or not d.startswith('.'))]
+def count_scan_files(roots, *, include_hidden=False, progress=None, stop_requested=None):
+    count=0
     for root_raw in roots:
-        root = Path(root_raw).expanduser()
-        if not root.exists():
-            continue
-        for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-            if stop_requested and stop_requested():
-                return count
-            if not include_hidden:
-                dirnames[:] = [d for d in dirnames if not d.startswith('.') and d not in SYSTEM_DIRS]
-                filenames = [f for f in filenames if not f.startswith('.')]
-            count += len(filenames)
-            if progress and count and count % 1000 == 0:
-                progress(count, str(dirpath))
-    return count
-
-
-def scan(roots: Iterable[str], *, max_hash_bytes: int = 64 * 1024 * 1024,
-         hash_only_interesting: bool = True, include_hidden: bool = False,
-         progress: Optional[Callable[[int, str], None]] = None,
-         stop_requested: Optional[Callable[[], bool]] = None) -> list[ScanItem]:
-    """Read-only inventory scan. Does not delete, move, rename, or alter source files."""
-    items: list[ScanItem] = []; count = 0
-    for root_raw in roots:
-        root = Path(root_raw).expanduser()
+        root=Path(root_raw).expanduser()
         if not root.exists(): continue
-        for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-            if stop_requested and stop_requested():
-                _assign_duplicate_groups(items); return items
-            if not include_hidden:
-                dirnames[:] = [d for d in dirnames if not d.startswith('.') and d not in SYSTEM_DIRS]
+        for dirpath,dirnames,filenames in os.walk(root,topdown=True,followlinks=False):
+            if stop_requested and stop_requested(): return count
+            dirnames[:]=_filter_dirnames(dirnames,include_hidden)
+            if not include_hidden: filenames=[f for f in filenames if not f.startswith('.')]
+            count+=len(filenames)
+            if progress and count and count%1000==0: progress(count,str(dirpath))
+    return count
+def scan(roots, *, max_hash_bytes=64*1024*1024, hash_only_interesting=True, include_hidden=False, progress=None, stop_requested=None):
+    items=[]; count=0
+    for root_raw in roots:
+        root=Path(root_raw).expanduser()
+        if not root.exists(): continue
+        for dirpath,dirnames,filenames in os.walk(root,topdown=True,followlinks=False):
+            if stop_requested and stop_requested(): _assign_duplicate_groups(items); return items
+            dirnames[:]=_filter_dirnames(dirnames,include_hidden)
             for filename in filenames:
-                if stop_requested and stop_requested():
-                    _assign_duplicate_groups(items); return items
-                path = Path(dirpath) / filename
+                if stop_requested and stop_requested(): _assign_duplicate_groups(items); return items
                 if not include_hidden and filename.startswith('.'): continue
-                try: st = path.stat()
-                except (OSError, PermissionError): continue
-                ext = path.suffix.lower(); score, reason, version = _score(path, st.st_size)
-                item = ScanItem(path=str(path), name=path.name, extension=ext, size=st.st_size,
-                                modified=st.st_mtime, modified_iso=_iso(st.st_mtime), score=score,
-                                category=_category(ext), version_hint=version, reason=reason)
-                should_hash = st.st_size <= max_hash_bytes and (not hash_only_interesting or score >= 40 or ext in ARCHIVE_EXTS)
-                if should_hash:
-                    try: item.sha256 = sha256_file(path)
-                    except (OSError, PermissionError): pass
-                item.status = 'GREEN' if score >= 75 else 'YELLOW' if score >= 45 else 'WHITE'
-                items.append(item); count += 1
-                if progress and (count <= 10 or count % 25 == 0): progress(count, str(path))
+                path=Path(dirpath)/filename
+                try: st=path.stat()
+                except (OSError,PermissionError): continue
+                ext=path.suffix.lower(); score,reason,version=_score(path,st.st_size)
+                item=ScanItem(str(path),path.name,ext,st.st_size,st.st_mtime,_iso(st.st_mtime),score,_category(ext),version_hint=version,reason=reason)
+                if st.st_size<=max_hash_bytes and (not hash_only_interesting or score>=40 or ext in ARCHIVE_EXTS):
+                    try: item.sha256=sha256_file(path)
+                    except (OSError,PermissionError): pass
+                item.status='GREEN' if score>=75 else 'YELLOW' if score>=45 else 'WHITE'; items.append(item); count+=1
+                if progress and (count<=10 or count%25==0): progress(count,str(path))
     _assign_duplicate_groups(items)
-    if progress and count: progress(count, items[-1].path)
+    if progress and count: progress(count,items[-1].path)
     return items
-
-
-def cleanup_candidates(items: Iterable[ScanItem]) -> list[dict]:
-    out = []
+def cleanup_candidates(items):
+    out=[]
     for i in items:
-        action = 'KEEP'; confidence = 0; reason = ''
-        if i.duplicate_of:
-            action, confidence, reason = 'QUARANTINE', 95, f'Bit-identische Dublette von {i.duplicate_of}'
-        elif i.size == 0 and i.category in {'archive', 'source'}:
-            action, confidence, reason = 'REVIEW', 80, 'Leere Entwicklungsdatei'
-        elif i.category == 'archive' and any(w in i.name.lower() for w in ('temp', 'tmp', 'test', 'old', 'alt', 'bak')):
-            action, confidence, reason = 'REVIEW', 55, 'Archivname deutet auf Zwischen-/Altstand hin'
-        out.append({**asdict(i), 'proposed_action': action, 'confidence': confidence, 'cleanup_reason': reason})
+        action='KEEP'; confidence=0; reason=''
+        if i.duplicate_of: action,confidence,reason='QUARANTINE',95,f'Bit-identische Dublette von {i.duplicate_of}'
+        elif i.size==0 and i.category in {'archive','source'}: action,confidence,reason='REVIEW',80,'Leere Entwicklungsdatei'
+        elif i.category=='archive' and any(w in i.name.lower() for w in ('temp','tmp','test','old','alt','bak')): action,confidence,reason='REVIEW',55,'Archivname deutet auf Zwischen-/Altstand hin'
+        out.append({**asdict(i),'proposed_action':action,'confidence':confidence,'cleanup_reason':reason})
     return out
-
-
-def export_json(items: Iterable[ScanItem], target: str) -> str:
-    path = Path(target); path.write_text(json.dumps([asdict(x) for x in items], ensure_ascii=False, indent=2), encoding='utf-8'); return str(path)
-
-
-def export_csv(items: Iterable[ScanItem], target: str) -> str:
-    rows = [asdict(x) for x in items]; path = Path(target)
-    with path.open('w', newline='', encoding='utf-8-sig') as f:
+def export_json(items,target):
+    path=Path(target); path.write_text(json.dumps([asdict(x) for x in items],ensure_ascii=False,indent=2),encoding='utf-8'); return str(path)
+def export_csv(items,target):
+    rows=[asdict(x) for x in items]; path=Path(target)
+    with path.open('w',newline='',encoding='utf-8-sig') as f:
         if rows:
-            w = csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
+            w=csv.DictWriter(f,fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
     return str(path)
-
-
-def quarantine(paths: Iterable[str], quarantine_root: str, *, reason: str = 'user-approved') -> list[dict]:
-    root = Path(quarantine_root); stamp = time.strftime('%Y%m%d-%H%M%S'); batch = root / stamp
-    batch.mkdir(parents=True, exist_ok=True); manifest = []
+def quarantine(paths,quarantine_root,*,reason='user-approved'):
+    root=Path(quarantine_root); stamp=time.strftime('%Y%m%d-%H%M%S'); batch=root/stamp; batch.mkdir(parents=True,exist_ok=True); manifest=[]
     for raw in paths:
-        src = Path(raw)
+        src=Path(raw)
         if not src.exists() or src.is_dir(): continue
-        before_hash = ''
-        try: before_hash = sha256_file(src)
-        except (OSError, PermissionError): pass
-        dest = batch / src.name; n = 1
-        while dest.exists(): dest = batch / f'{src.stem}__{n}{src.suffix}'; n += 1
-        size = src.stat().st_size
-        shutil.move(str(src), str(dest))
-        manifest.append({'source': str(src), 'quarantine': str(dest), 'size': size,
-                         'sha256': before_hash, 'quarantined_at_epoch': time.time(),
-                         'quarantined_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'reason': reason})
-    payload = {'schema': 'pc-backup-vault.quarantine-manifest.v2', 'batch': stamp, 'items': manifest,
-               'permanent_delete_performed': False}
-    (batch / 'manifest.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    return manifest
-
-
-def _manifest_items(payload) -> list[dict]:
-    return payload.get('items', []) if isinstance(payload, dict) else payload
-
-
-def restore_quarantine(manifest_file: str) -> list[dict]:
-    payload = json.loads(Path(manifest_file).read_text(encoding='utf-8')); restored = []
+        try: before_hash=sha256_file(src)
+        except (OSError,PermissionError): before_hash=''
+        dest=batch/src.name; n=1
+        while dest.exists(): dest=batch/f'{src.stem}__{n}{src.suffix}'; n+=1
+        size=src.stat().st_size; shutil.move(str(src),str(dest)); manifest.append({'source':str(src),'quarantine':str(dest),'size':size,'sha256':before_hash,'quarantined_at_epoch':time.time(),'quarantined_at':time.strftime('%Y-%m-%d %H:%M:%S'),'reason':reason})
+    payload={'schema':'pc-backup-vault.quarantine-manifest.v2','batch':stamp,'items':manifest,'permanent_delete_performed':False}; (batch/'manifest.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8'); return manifest
+def _manifest_items(payload): return payload.get('items',[]) if isinstance(payload,dict) else payload
+def restore_quarantine(manifest_file):
+    payload=json.loads(Path(manifest_file).read_text(encoding='utf-8')); restored=[]
     for row in _manifest_items(payload):
-        src = Path(row['quarantine']); dest = Path(row['source'])
+        src=Path(row['quarantine']); dest=Path(row['source'])
         if not src.exists() or dest.exists(): continue
-        expected = str(row.get('sha256') or '')
+        expected=str(row.get('sha256') or '')
         if expected:
             try:
-                if sha256_file(src) != expected: continue
-            except (OSError, PermissionError): continue
-        dest.parent.mkdir(parents=True, exist_ok=True); shutil.move(str(src), str(dest)); restored.append({'restored': str(dest)})
+                if sha256_file(src)!=expected: continue
+            except (OSError,PermissionError): continue
+        dest.parent.mkdir(parents=True,exist_ok=True); shutil.move(str(src),str(dest)); restored.append({'restored':str(dest)})
     return restored
-
-
-def purge_quarantine(manifest_file: str, *, min_age_days: int = 30, confirmed: bool = False, now: float | None = None) -> list[dict]:
-    if not confirmed:
-        raise PermissionError('Endgültiges Löschen erfordert eine ausdrückliche Bestätigung.')
-    payload = json.loads(Path(manifest_file).read_text(encoding='utf-8')); current = time.time() if now is None else now
-    deleted = []
+def purge_quarantine(manifest_file,*,min_age_days=30,confirmed=False,now=None):
+    if not confirmed: raise PermissionError('Endgültiges Löschen erfordert eine ausdrückliche Bestätigung.')
+    payload=json.loads(Path(manifest_file).read_text(encoding='utf-8')); current=time.time() if now is None else now; deleted=[]
     for row in _manifest_items(payload):
-        q = Path(row['quarantine']); when = float(row.get('quarantined_at_epoch') or 0)
-        if not q.exists() or q.is_dir() or when <= 0: continue
-        age_days = (current - when) / 86400
-        if age_days < min_age_days: continue
-        expected = str(row.get('sha256') or '')
+        q=Path(row['quarantine']); when=float(row.get('quarantined_at_epoch') or 0)
+        if not q.exists() or q.is_dir() or when<=0: continue
+        age_days=(current-when)/86400
+        if age_days<min_age_days: continue
+        expected=str(row.get('sha256') or '')
         if expected:
             try:
-                if sha256_file(q) != expected: continue
-            except (OSError, PermissionError): continue
-        q.unlink(); deleted.append({'deleted': str(q), 'age_days': round(age_days, 1)})
+                if sha256_file(q)!=expected: continue
+            except (OSError,PermissionError): continue
+        q.unlink(); deleted.append({'deleted':str(q),'age_days':round(age_days,1)})
     return deleted
