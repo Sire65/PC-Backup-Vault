@@ -161,6 +161,48 @@ DEFAULT_KC_PROGRAMS = (
         ),
         notes="Kassen bleiben autonom. Backup Central liest nur vorbereitete, konsistente Exporte bzw. freigegebene Manager-Daten.",
     ),
+    KCProgramDefinition(
+        program_id="kc-futura",
+        display_name="KC Futura",
+        sources=(
+            BackupSourceDefinition("program", "Programm-/Konfigurationsdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("local-data", "Lokale Schulungs-/Prüfungsdaten / Export", SourceKind.LOCAL_EXPORT),
+            BackupSourceDefinition("cloud-export", "Academy-/Cloud-Datenexport", SourceKind.DATABASE_EXPORT),
+            BackupSourceDefinition("documents", "Zertifikate / Dokumente", SourceKind.DOCUMENTS, SourceRequirement.OPTIONAL),
+        ),
+        notes="Cloud-Daten nur als konsistenter Export/Snapshot; keine Rohkopie einer laufenden Datenbank.",
+    ),
+    KCProgramDefinition(
+        program_id="kc-tv-editor",
+        display_name="KC TV-Editor",
+        sources=(
+            BackupSourceDefinition("program", "Programm-/Konfigurationsdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("projects", "Präsentations-/Projektdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("media", "Medien / Bilder / Vorlagen", SourceKind.FOLDER, SourceRequirement.OPTIONAL),
+            BackupSourceDefinition("exports", "MP4-/PNG-/ZIP-Exporte", SourceKind.FOLDER, SourceRequirement.OPTIONAL),
+        ),
+        notes="Ausgabeexporte sind optional; entscheidend sind Programm-/Konfiguration und die bearbeitbaren Projektdaten.",
+    ),
+    KCProgramDefinition(
+        program_id="kc-inventar",
+        display_name="KC Inventar",
+        sources=(
+            BackupSourceDefinition("program", "Programm-/Konfigurationsdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("inventory-export", "Inventardaten / Export", SourceKind.LOCAL_EXPORT),
+            BackupSourceDefinition("documents", "Protokolle / Ausdrucke", SourceKind.DOCUMENTS, SourceRequirement.OPTIONAL),
+        ),
+    ),
+    KCProgramDefinition(
+        program_id="kc-bilderrechner",
+        display_name="KC Bilderrechner",
+        sources=(
+            BackupSourceDefinition("program", "Programm-/Konfigurationsdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("project-data", "Projekt-/Vorlagendaten", SourceKind.FOLDER),
+            BackupSourceDefinition("assets", "Bilder / Grafiken", SourceKind.FOLDER, SourceRequirement.OPTIONAL),
+            BackupSourceDefinition("exports", "Erzeugte Ausgaben", SourceKind.FOLDER, SourceRequirement.OPTIONAL),
+        ),
+        notes="Erzeugte Ausgaben sind optional; Quell-/Vorlagendaten bleiben der primäre Sicherungsumfang.",
+    ),
 )
 
 
