@@ -5,10 +5,12 @@ from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
+from kc_backup_central_integration import enable_backup_central
 
 
 enable_project_finder(App)
 enable_auto_update(App)
+enable_backup_central(App)
 
 
 def _show_already_running():
