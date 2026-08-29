@@ -3,7 +3,9 @@ name: Windows EXE und Setup bauen
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feature/project-finder-productive-inventory
     paths:
       - "**.py"
       - "requirements.txt"
@@ -31,6 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+
+      - name: Integrierten Quellstand kompilieren
+        shell: pwsh
+        run: python -m compileall -q app.py project_finder
 
       - name: PC Backup Vault bauen
         shell: pwsh
