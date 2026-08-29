@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, RIGHT, X, BooleanVar, StringVar, filedialog, messagebox, ttk
+from tkinter import BOTH, END, LEFT, RIGHT, X, BooleanVar, DoubleVar, StringVar, filedialog, messagebox, ttk
 
 from .decision_engine import classify_inventory, export_inventory_csv, export_inventory_json, inventory_summary
-from .scanner import cleanup_candidates, quarantine, scan
+from .scanner import cleanup_candidates, count_scan_files, quarantine, scan
 
 
 class ProjectFinderTab(ttk.Frame):
@@ -16,8 +17,12 @@ class ProjectFinderTab(ttk.Frame):
         self.roots: list[str] = []
         self.items = []
         self.stop_flag = False
+        self.scan_total = 0
+        self.scan_started = 0.0
         self.quarantine_root = quarantine_root or str(Path.home() / 'PC-Backup-Vault-Quarantaene')
         self.status_var = StringVar(value='Bereit · Inventur verändert keine Quelldateien.')
+        self.progress_var = DoubleVar(value=0.0)
+        self.progress_text = StringVar(value='0 % · 0 / 0 Dateien · Rest 0 · Restzeit —')
         self.only_kc = BooleanVar(value=True)
         self._build()
 
@@ -36,10 +41,14 @@ class ProjectFinderTab(ttk.Frame):
         self.root_list.pack(fill=X, padx=8, pady=(0, 8))
 
         scanbox = ttk.LabelFrame(self, text='2 · Read-only Inventur'); scanbox.pack(fill=X, padx=12, pady=6)
-        bar = ttk.Frame(scanbox); bar.pack(fill=X, padx=8, pady=8)
+        bar = ttk.Frame(scanbox); bar.pack(fill=X, padx=8, pady=(8, 4))
         ttk.Button(bar, text='Inventur starten', command=self.start_scan).pack(side=LEFT, padx=(0, 6))
         ttk.Button(bar, text='Abbrechen', command=self.stop_scan).pack(side=LEFT, padx=(0, 12))
         ttk.Checkbutton(bar, text='Nur relevante Projekt-/Git-/Prüffunde anzeigen', variable=self.only_kc).pack(side=LEFT)
+        progress_row = ttk.Frame(scanbox); progress_row.pack(fill=X, padx=8, pady=(2, 8))
+        self.progress = ttk.Progressbar(progress_row, orient='horizontal', mode='determinate', maximum=100.0, variable=self.progress_var)
+        self.progress.pack(fill=X, expand=True, side=LEFT, padx=(0, 10))
+        ttk.Label(progress_row, textvariable=self.progress_text, width=52, anchor='e').pack(side=RIGHT)
 
         results = ttk.LabelFrame(self, text='3 · Entscheidung: Git / Behalten / Prüfen / Quarantäne'); results.pack(fill=BOTH, expand=True, padx=12, pady=6)
         cols = ('ampel','name','version','typ','groesse','datum','git','inventur','sicherheit','pfad')
@@ -67,19 +76,59 @@ class ProjectFinderTab(ttk.Frame):
             if vals and vals[0] in self.roots: self.roots.remove(vals[0])
             self.root_list.delete(iid)
 
+    @staticmethod
+    def _fmt_eta(seconds: float | None) -> str:
+        if seconds is None or seconds < 0 or seconds == float('inf'):
+            return '—'
+        sec = int(round(seconds))
+        if sec < 60: return f'{sec} s'
+        minutes, sec = divmod(sec, 60)
+        if minutes < 60: return f'{minutes} min {sec:02d} s'
+        hours, minutes = divmod(minutes, 60)
+        return f'{hours} h {minutes:02d} min'
+
+    def _set_progress(self, done: int, path: str = ''):
+        total = max(0, int(self.scan_total))
+        done = max(0, int(done))
+        pct = min(100.0, (done / total * 100.0) if total else 0.0)
+        rest = max(0, total - done)
+        elapsed = max(0.0, time.monotonic() - self.scan_started) if self.scan_started else 0.0
+        eta = None
+        if done > 0 and elapsed > 0 and rest > 0:
+            eta = elapsed / done * rest
+        elif total and rest == 0:
+            eta = 0.0
+        self.progress_var.set(pct)
+        self.progress_text.set(f'{pct:5.1f} % · {done:,} / {total:,} Dateien · Rest {rest:,} · Restzeit {self._fmt_eta(eta)}')
+        if path:
+            self.status_var.set(f'Inventur läuft · {done:,}/{total:,} · {path}')
+
     def start_scan(self):
         if not self.roots:
             messagebox.showinfo('Projekt-Finder','Bitte zuerst mindestens ein Laufwerk oder Verzeichnis auswählen.'); return
         self.stop_flag=False; self.items=[]; self.tree.delete(*self.tree.get_children())
-        self.status_var.set('Inventur läuft · Nur Lesen · SHA-256 bis 64 MB')
+        self.scan_total=0; self.scan_started=0.0; self.progress_var.set(0.0)
+        self.progress_text.set('Vorprüfung · Dateien werden gezählt…')
+        self.status_var.set('Vorprüfung läuft · Nur Lesen · Dateianzahl wird ermittelt')
         threading.Thread(target=self._scan_worker,daemon=True).start()
 
     def _scan_worker(self):
         try:
+            total=count_scan_files(
+                self.roots,
+                progress=lambda n,p:self.after(0, lambda n=n,p=p: self.status_var.set(f'Vorprüfung · mindestens {n:,} Dateien gefunden · {p}')),
+                stop_requested=lambda:self.stop_flag,
+            )
+            if self.stop_flag:
+                self.after(0, lambda:self.status_var.set('Inventur abgebrochen · keine Quelldatei verändert'))
+                return
+            self.scan_total=total
+            self.scan_started=time.monotonic()
+            self.after(0, lambda:self._set_progress(0))
             self.items=scan(
                 self.roots,
                 hash_only_interesting=False,
-                progress=lambda n,p:self.after(0,lambda:self.status_var.set(f'Inventur läuft · {n:,} Dateien · {p}')),
+                progress=lambda n,p:self.after(0, lambda n=n,p=p:self._set_progress(n,p)),
                 stop_requested=lambda:self.stop_flag,
             )
             self.after(0,self._render)
@@ -110,7 +159,14 @@ class ProjectFinderTab(ttk.Frame):
             self.tree.insert('',END,values=(lamp,i.name,i.version_hint,i.category,self._fmt_size(i.size),i.modified_iso,git_label,inv_label,f"{row['confidence']} %",i.path))
             shown+=1
         summary=inventory_summary(self.items)['counts']
-        self.status_var.set(f"Fertig · {summary['files']:,} Dateien · {summary['to_git']:,} zu Git · {summary['quarantine_candidates']:,} sichere Dubletten · {shown:,} angezeigt")
+        done=len(self.items)
+        if self.stop_flag and self.scan_total and done < self.scan_total:
+            self._set_progress(done)
+            self.status_var.set(f"Abgebrochen · {done:,} von {self.scan_total:,} Dateien erfasst · keine Quelldatei verändert")
+        else:
+            self.scan_total=max(self.scan_total, done)
+            self._set_progress(self.scan_total)
+            self.status_var.set(f"Fertig · {summary['files']:,} Dateien · {summary['to_git']:,} zu Git · {summary['quarantine_candidates']:,} sichere Dubletten · {shown:,} angezeigt")
 
     def selected_paths(self):
         return [self.tree.item(x,'values')[-1] for x in self.tree.selection() if self.tree.item(x,'values')]
