@@ -5,8 +5,14 @@ from dataclasses import asdict
 from datetime import date, time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
-from kc_backup_scheduler import BackupScheduleJob, BackupSafetyProfile, ScheduleFrequency
+from kc_backup_scheduler import (
+    BackupScheduleJob,
+    BackupSafetyProfile,
+    ScheduleAction,
+    ScheduleFrequency,
+)
 
 
 STORE_VERSION = 1
@@ -20,7 +26,7 @@ def _job_to_dict(job: BackupScheduleJob) -> dict:
     return {
         "job_id": job.job_id,
         "program_id": job.program_id,
-        "job_type": job.job_type,
+        "action": job.action.value,
         "display_name": job.display_name,
         "start_date": job.start_date.isoformat(),
         "start_time": job.start_time.strftime("%H:%M:%S"),
@@ -53,13 +59,16 @@ def _profile_from_dict(raw: dict) -> BackupSafetyProfile:
         "restore_test", "require_recovery_material", "allow_silent_restore", "protect_last_known_good",
     }
     clean = {key: value for key, value in dict(raw or {}).items() if key in allowed}
+    if "name" not in clean:
+        clean["name"] = "KC MAXIMUM"
     return BackupSafetyProfile(**clean)
 
 
 def _job_from_dict(raw: dict) -> BackupScheduleJob:
+    job_id = str(raw.get("job_id") or "").strip() or str(uuid4())
     return BackupScheduleJob(
         program_id=str(raw["program_id"]),
-        job_type=str(raw.get("job_type") or "BACKUP"),
+        action=ScheduleAction(str(raw.get("action") or "BACKUP")),
         display_name=str(raw.get("display_name") or "Automatische Sicherung"),
         start_date=date.fromisoformat(str(raw["start_date"])),
         start_time=time.fromisoformat(str(raw["start_time"])),
@@ -67,8 +76,8 @@ def _job_from_dict(raw: dict) -> BackupScheduleJob:
         enabled=bool(raw.get("enabled", True)),
         weekday=raw.get("weekday"),
         day_of_month=raw.get("day_of_month"),
-        profile=_profile_from_dict(raw.get("profile") or {"name": "KC MAXIMUM"}),
-        job_id=str(raw.get("job_id") or "").strip() or None,
+        profile=_profile_from_dict(raw.get("profile") or {}),
+        job_id=job_id,
     )
 
 
@@ -79,10 +88,4 @@ def load_jobs(path: str | Path) -> list[BackupScheduleJob]:
     raw = json.loads(source.read_text(encoding="utf-8"))
     if int(raw.get("store_version", 0)) != STORE_VERSION:
         raise ValueError("Unbekannte Scheduler-Speicherversion")
-    jobs = []
-    for item in raw.get("jobs", []):
-        job = _job_from_dict(item)
-        if job.job_id is None:
-            raise ValueError("job_id konnte nicht hergestellt werden")
-        jobs.append(job)
-    return jobs
+    return [_job_from_dict(item) for item in raw.get("jobs", [])]
