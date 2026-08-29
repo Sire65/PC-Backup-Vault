@@ -1,50 +1,78 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from kc_backup_program_registry import KCProgramDefinition, KCProgramRegistry, SourceKind, resolve_program_scope
+from kc_backup_program_status import ProgramRuntimeStatus, next_job_for_program, traffic_light
 from kc_backup_program_store import save_program_registry
 
 
 class KCProgramsWindow(tk.Toplevel):
-    def __init__(self, master, *, registry: KCProgramRegistry, store_path: str | Path, on_backup=None):
+    def __init__(
+        self,
+        master,
+        *,
+        registry: KCProgramRegistry,
+        store_path: str | Path,
+        on_backup=None,
+        runtime_statuses: dict[str, ProgramRuntimeStatus] | None = None,
+        scheduler_jobs=(),
+    ):
         super().__init__(master)
         self.registry = registry
         self.store_path = Path(store_path)
         self.on_backup = on_backup
+        self.runtime_statuses = dict(runtime_statuses or {})
+        self.scheduler_jobs = list(scheduler_jobs or ())
         self.title("Backup Central – KC Programme")
-        self.geometry("1120x720")
-        self.minsize(900, 600)
+        self.geometry("1320x760")
+        self.minsize(1040, 620)
         self._build()
         self.refresh()
 
     def _build(self):
         head = ttk.Frame(self, padding=12); head.pack(fill="x")
         ttk.Label(head, text="KC Programme", font=("Segoe UI", 18, "bold")).pack(side="left")
-        ttk.Label(head, text="Sicherungsumfang konfigurieren · prüfen · One-Touch starten").pack(side="left", padx=16)
+        ttk.Label(head, text="Sicherungsumfang · Status · Verify · Kalender · One-Touch").pack(side="left", padx=16)
 
         body = ttk.Panedwindow(self, orient="horizontal"); body.pack(fill="both", expand=True, padx=12, pady=(0, 10))
         left = ttk.Frame(body, padding=6); right = ttk.Frame(body, padding=6)
-        body.add(left, weight=2); body.add(right, weight=3)
+        body.add(left, weight=3); body.add(right, weight=3)
 
-        self.program_tree = ttk.Treeview(left, columns=("status", "sources", "missing"), show="tree headings", height=18)
-        self.program_tree.heading("#0", text="Programm"); self.program_tree.column("#0", width=190)
-        self.program_tree.heading("status", text="Status"); self.program_tree.column("status", width=90)
-        self.program_tree.heading("sources", text="Bereiche"); self.program_tree.column("sources", width=80)
-        self.program_tree.heading("missing", text="Fehlt"); self.program_tree.column("missing", width=70)
+        self.program_tree = ttk.Treeview(
+            left,
+            columns=("traffic", "backup", "verify", "next", "missing"),
+            show="tree headings",
+            height=18,
+        )
+        columns = (
+            ("#0", "Programm", 170),
+            ("traffic", "Ampel", 75),
+            ("backup", "Letzte Sicherung", 145),
+            ("verify", "Verify", 70),
+            ("next", "Nächster Job", 145),
+            ("missing", "Fehlt", 55),
+        )
+        for key, title, width in columns:
+            self.program_tree.heading(key, text=title); self.program_tree.column(key, width=width, anchor="w")
+        self.program_tree.tag_configure("GREEN", foreground="#166534")
+        self.program_tree.tag_configure("YELLOW", foreground="#a16207")
+        self.program_tree.tag_configure("RED", foreground="#b91c1c")
         self.program_tree.pack(fill="both", expand=True)
         self.program_tree.bind("<<TreeviewSelect>>", lambda _e: self._render_sources())
 
         self.title_label = ttk.Label(right, text="Programm wählen", font=("Segoe UI", 14, "bold")); self.title_label.pack(anchor="w")
-        self.note_label = ttk.Label(right, text="", wraplength=610); self.note_label.pack(anchor="w", pady=(4, 8))
+        self.note_label = ttk.Label(right, text="", wraplength=650); self.note_label.pack(anchor="w", pady=(4, 8))
+        self.runtime_label = ttk.Label(right, text="", wraplength=650); self.runtime_label.pack(anchor="w", pady=(0, 8))
         self.source_tree = ttk.Treeview(right, columns=("required", "kind", "path"), show="tree headings", height=14)
         self.source_tree.heading("#0", text="Sicherungsbereich"); self.source_tree.column("#0", width=220)
         self.source_tree.heading("required", text="Pflicht"); self.source_tree.column("required", width=70)
         self.source_tree.heading("kind", text="Typ"); self.source_tree.column("kind", width=110)
-        self.source_tree.heading("path", text="Quelle"); self.source_tree.column("path", width=360)
+        self.source_tree.heading("path", text="Quelle"); self.source_tree.column("path", width=390)
         self.source_tree.pack(fill="both", expand=True)
 
         buttons = ttk.Frame(right); buttons.pack(fill="x", pady=(8, 0))
@@ -63,14 +91,25 @@ class KCProgramsWindow(tk.Toplevel):
         selection = self.source_tree.selection()
         return selection[0] if selection else None
 
+    @staticmethod
+    def _fmt_datetime(value: datetime | None) -> str:
+        return value.strftime("%d.%m.%Y %H:%M") if value else "–"
+
     def refresh(self):
         selected = self.program_tree.selection()[0] if self.program_tree.selection() else None
         self.program_tree.delete(*self.program_tree.get_children())
         for program in self.registry.all():
-            missing = len(program.missing_required_sources())
-            status = "BEREIT" if program.ready else "OFFEN"
-            self.program_tree.insert("", "end", iid=program.program_id, text=program.display_name,
-                                     values=(status, len(program.sources), missing))
+            scope = resolve_program_scope(program)
+            runtime = self.runtime_statuses.get(program.program_id)
+            light, _detail = traffic_light(scope_ready=scope.ready, runtime=runtime)
+            last_backup = runtime.backup_datetime if runtime else None
+            verify = (runtime.verify_status or "–") if runtime else "–"
+            next_job = next_job_for_program(self.scheduler_jobs, program.program_id)
+            self.program_tree.insert(
+                "", "end", iid=program.program_id, text=program.display_name,
+                values=(light, self._fmt_datetime(last_backup), verify, self._fmt_datetime(next_job), len(scope.blockers)),
+                tags=({"GRÜN":"GREEN", "GELB":"YELLOW", "ROT":"RED"}[light],),
+            )
         if selected and self.program_tree.exists(selected): self.program_tree.selection_set(selected)
         self._render_sources()
 
@@ -78,7 +117,7 @@ class KCProgramsWindow(tk.Toplevel):
         self.source_tree.delete(*self.source_tree.get_children())
         program = self._selected_program()
         if not program:
-            self.title_label.config(text="Programm wählen"); self.note_label.config(text=""); return
+            self.title_label.config(text="Programm wählen"); self.note_label.config(text=""); self.runtime_label.config(text=""); return
         self.title_label.config(text=program.display_name)
         self.note_label.config(text=program.notes or "")
         for source in program.sources:
@@ -86,6 +125,16 @@ class KCProgramsWindow(tk.Toplevel):
                                     values=("Ja" if source.requirement.value == "REQUIRED" else "Nein", source.kind.value,
                                             source.configured_path or "nicht konfiguriert"))
         scope = resolve_program_scope(program)
+        runtime = self.runtime_statuses.get(program.program_id)
+        light, detail = traffic_light(scope_ready=scope.ready, runtime=runtime)
+        next_job = next_job_for_program(self.scheduler_jobs, program.program_id)
+        last_backup = runtime.backup_datetime if runtime else None
+        verify = (runtime.verify_status or "–") if runtime else "–"
+        error = f" · Letzter Fehler: {runtime.last_error}" if runtime and runtime.last_error else ""
+        self.runtime_label.config(
+            text=f"Ampel: {light} · Letzte Sicherung: {self._fmt_datetime(last_backup)} · Verify: {verify} · "
+                 f"Nächster Job: {self._fmt_datetime(next_job)}\n{detail}{error}"
+        )
         self.status.config(text=("Bereit für Probelauf und Sicherung." if scope.ready else f"Nicht bereit: {len(scope.blockers)} Blocker") +
                                 (f" · {len(scope.warnings)} Hinweis(e)" if scope.warnings else ""))
 
