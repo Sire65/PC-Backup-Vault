@@ -130,6 +130,15 @@ class KCProgramRegistry:
 # locations have been inventoried and explicitly configured.
 DEFAULT_KC_PROGRAMS = (
     KCProgramDefinition(
+        program_id="pc-backup-vault",
+        display_name="PC Backup Vault",
+        sources=(
+            BackupSourceDefinition("program", "Programm-/Konfigurationsdaten", SourceKind.FOLDER),
+            BackupSourceDefinition("reports", "Reports / Protokolle", SourceKind.DOCUMENTS, SourceRequirement.OPTIONAL),
+        ),
+        notes="Backup Vault selbst wird wie jedes andere Programm behandelt. Es werden keine Installations- oder Datenpfade automatisch geraten.",
+    ),
+    KCProgramDefinition(
         program_id="kc-dp2",
         display_name="KC DP2",
         sources=(
