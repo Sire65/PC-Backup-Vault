@@ -16,6 +16,11 @@ SECRET_NAMES = {
 }
 SECRET_FRAGMENTS = ('secret', 'credential', 'private_key', 'apikey', 'api_key', 'password', 'token')
 TEMP_DIRS = {'tmp', 'temp', 'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
+KNOWN_PROJECT_DIRS = {
+    'dp2', 'dienstplan', 'kc dp2', 'pc-backup-vault', 'pc backup vault',
+    'bilderkasse', 'marktkasse', 'kc marktkasse', 'kasse',
+    'bilderrechner', 'kc-bilderrechner', 'kc bilderrechner',
+}
 PROJECT_MARKERS = {
     'pyproject.toml', 'requirements.txt', 'package.json', 'package-lock.json',
     'vite.config.js', 'vite.config.ts', 'netlify.toml', 'vercel.json', 'schema.sql',
@@ -41,12 +46,17 @@ def _is_temp_path(item: ScanItem) -> bool:
 
 def _looks_project_material(item: ScanItem) -> bool:
     ext = item.extension.lower()
+    parts = _parts_lower(item.path)
     if item.score >= 45:
         return True
-    if ext in SOURCE_EXTS or ext in IMAGE_EXTS:
-        parts = _parts_lower(item.path)
-        return any(p in {'src', 'app', 'apps', 'assets', 'public', 'static', 'pos', 'pc-manager', 'tests'} for p in parts)
-    return item.name.lower() in PROJECT_MARKERS
+    if item.name.lower() in PROJECT_MARKERS:
+        return True
+    if ext in SOURCE_EXTS or ext in IMAGE_EXTS or ext in DOC_EXTS:
+        if any(p in {'src', 'app', 'apps', 'assets', 'public', 'static', 'pos', 'pc-manager', 'tests'} for p in parts):
+            return True
+        if any(p in KNOWN_PROJECT_DIRS for p in parts):
+            return True
+    return False
 
 
 def classify_item(item: ScanItem) -> dict:
@@ -106,11 +116,16 @@ def inventory_summary(items: Iterable[ScanItem]) -> dict:
     sizes = {'total': 0, 'quarantine_candidates': 0}
     for row in rows:
         sizes['total'] += int(row.get('size') or 0)
-        if row['git_action'] == 'TO_GIT': counts['to_git'] += 1
-        if row['git_action'] == 'REVIEW': counts['git_review'] += 1
-        if row['git_action'] == 'NEVER': counts['never_git'] += 1
-        if row['inventory_action'] == 'KEEP_LOCAL': counts['keep_local'] += 1
-        if row['inventory_action'] == 'REVIEW': counts['review'] += 1
+        if row['git_action'] == 'TO_GIT':
+            counts['to_git'] += 1
+        if row['git_action'] == 'REVIEW':
+            counts['git_review'] += 1
+        if row['git_action'] == 'NEVER':
+            counts['never_git'] += 1
+        if row['inventory_action'] == 'KEEP_LOCAL':
+            counts['keep_local'] += 1
+        if row['inventory_action'] == 'REVIEW':
+            counts['review'] += 1
         if row['inventory_action'] == 'QUARANTINE_CANDIDATE':
             counts['quarantine_candidates'] += 1
             sizes['quarantine_candidates'] += int(row.get('size') or 0)
