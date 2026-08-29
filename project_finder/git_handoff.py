@@ -97,6 +97,13 @@ def create_git_handoff(items: Iterable[ScanItem], target_zip: str) -> dict:
             if reason:
                 excluded.append({'source_path': str(src), 'reason': reason})
                 continue
+            if not src.exists() or not src.is_file():
+                excluded.append({'source_path': str(src), 'reason': 'missing'})
+                continue
+            content_reason = secret_content_reason(src)
+            if content_reason:
+                excluded.append({'source_path': str(src), 'reason': content_reason})
+                continue
             if git_action not in {'TO_GIT', 'REVIEW'}:
                 excluded.append({'source_path': str(src), 'reason': f'git_action_{git_action.lower()}'})
                 continue
@@ -105,13 +112,6 @@ def create_git_handoff(items: Iterable[ScanItem], target_zip: str) -> dict:
                 continue
             if item.category not in {'source', 'document', 'image_asset', 'binary_or_launcher'}:
                 excluded.append({'source_path': str(src), 'reason': 'unsupported_category'})
-                continue
-            if not src.exists() or not src.is_file():
-                excluded.append({'source_path': str(src), 'reason': 'missing'})
-                continue
-            content_reason = secret_content_reason(src)
-            if content_reason:
-                excluded.append({'source_path': str(src), 'reason': content_reason})
                 continue
             digest = sha256_file(src)
             key = (digest, src.name.lower())
