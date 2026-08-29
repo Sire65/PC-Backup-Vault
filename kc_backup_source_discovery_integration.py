@@ -29,8 +29,8 @@ def enable_source_discovery(App):
     original_build = App._build
 
     def open_kc_source_discovery(self):
+        path = self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
         try:
-            path = self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
             registry = load_program_registry(path, default_registry())
         except Exception as exc:
             messagebox.showerror(
@@ -39,7 +39,7 @@ def enable_source_discovery(App):
                 parent=self,
             )
             return None
-        return SourceDiscoveryWindow(self, registry=registry)
+        return SourceDiscoveryWindow(self, registry=registry, store_path=path)
 
     def build_with_source_discovery(self):
         original_build(self)
