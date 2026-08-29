@@ -98,13 +98,6 @@ def _normalized_parts(path: str) -> list[str]:
 
 
 def _canonical_rank(item: ScanItem) -> tuple[int, int, int, int, str]:
-    """Lower is better; strongly prefer real source/assets over build/cache copies.
-
-    Generic OS-level temp roots (for example /tmp on CI) are intentionally not a
-    strong penalty. Only build/cache/venv-style project subtrees are strong temp
-    evidence. A temp/tmp directory immediately above the file remains a weak
-    penalty so real project folders named tmp are still treated conservatively.
-    """
     parts = _normalized_parts(item.path)
     parent = parts[-2] if len(parts) >= 2 else ''
     strong_temp_penalty = 1 if any(p in STRONG_TEMP_PARTS for p in parts) else 0
@@ -132,6 +125,27 @@ def _assign_duplicate_groups(items: list[ScanItem]) -> None:
             item.status = 'BLUE'
             if 'bit-identische Dublette' not in item.reason:
                 item.reason = (item.reason + ', ' if item.reason else '') + 'bit-identische Dublette'
+
+
+def count_scan_files(roots: Iterable[str], *, include_hidden: bool = False,
+                     progress: Optional[Callable[[int, str], None]] = None,
+                     stop_requested: Optional[Callable[[], bool]] = None) -> int:
+    """Read-only pre-count used for a determinate progress bar and ETA."""
+    count = 0
+    for root_raw in roots:
+        root = Path(root_raw).expanduser()
+        if not root.exists():
+            continue
+        for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+            if stop_requested and stop_requested():
+                return count
+            if not include_hidden:
+                dirnames[:] = [d for d in dirnames if not d.startswith('.') and d not in SYSTEM_DIRS]
+                filenames = [f for f in filenames if not f.startswith('.')]
+            count += len(filenames)
+            if progress and count and count % 1000 == 0:
+                progress(count, str(dirpath))
+    return count
 
 
 def scan(roots: Iterable[str], *, max_hash_bytes: int = 64 * 1024 * 1024,
@@ -165,13 +179,13 @@ def scan(roots: Iterable[str], *, max_hash_bytes: int = 64 * 1024 * 1024,
                     except (OSError, PermissionError): pass
                 item.status = 'GREEN' if score >= 75 else 'YELLOW' if score >= 45 else 'WHITE'
                 items.append(item); count += 1
-                if progress and count % 100 == 0: progress(count, str(path))
+                if progress and (count <= 10 or count % 25 == 0): progress(count, str(path))
     _assign_duplicate_groups(items)
+    if progress and count: progress(count, items[-1].path)
     return items
 
 
 def cleanup_candidates(items: Iterable[ScanItem]) -> list[dict]:
-    """Generate proposals only. Never deletes anything."""
     out = []
     for i in items:
         action = 'KEEP'; confidence = 0; reason = ''
@@ -198,7 +212,6 @@ def export_csv(items: Iterable[ScanItem], target: str) -> str:
 
 
 def quarantine(paths: Iterable[str], quarantine_root: str, *, reason: str = 'user-approved') -> list[dict]:
-    """Move explicitly selected files into reversible quarantine; never permanent delete."""
     root = Path(quarantine_root); stamp = time.strftime('%Y%m%d-%H%M%S'); batch = root / stamp
     batch.mkdir(parents=True, exist_ok=True); manifest = []
     for raw in paths:
@@ -211,11 +224,9 @@ def quarantine(paths: Iterable[str], quarantine_root: str, *, reason: str = 'use
         while dest.exists(): dest = batch / f'{src.stem}__{n}{src.suffix}'; n += 1
         size = src.stat().st_size
         shutil.move(str(src), str(dest))
-        manifest.append({
-            'source': str(src), 'quarantine': str(dest), 'size': size,
-            'sha256': before_hash, 'quarantined_at_epoch': time.time(),
-            'quarantined_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'reason': reason,
-        })
+        manifest.append({'source': str(src), 'quarantine': str(dest), 'size': size,
+                         'sha256': before_hash, 'quarantined_at_epoch': time.time(),
+                         'quarantined_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'reason': reason})
     payload = {'schema': 'pc-backup-vault.quarantine-manifest.v2', 'batch': stamp, 'items': manifest,
                'permanent_delete_performed': False}
     (batch / 'manifest.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -241,7 +252,6 @@ def restore_quarantine(manifest_file: str) -> list[dict]:
 
 
 def purge_quarantine(manifest_file: str, *, min_age_days: int = 30, confirmed: bool = False, now: float | None = None) -> list[dict]:
-    """Permanently delete only quarantined files after age gate and explicit confirmation."""
     if not confirmed:
         raise PermissionError('Endgültiges Löschen erfordert eine ausdrückliche Bestätigung.')
     payload = json.loads(Path(manifest_file).read_text(encoding='utf-8')); current = time.time() if now is None else now
