@@ -1,9 +1,10 @@
-name: Project Finder Windows Preview
+name: Project Finder Windows Inventory
 
 on:
   push:
     branches:
       - feature/project-finder-safe-cleanup
+      - feature/project-finder-productive-inventory
     paths:
       - 'project_finder/**'
       - 'PROJECT_FINDER_VORSCHAU.py'
@@ -14,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build-preview:
+  build-inventory:
     runs-on: windows-latest
     timeout-minutes: 12
     steps:
@@ -32,30 +33,34 @@ jobs:
       - name: Run Project Finder unit tests
         run: python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
 
-      - name: Install preview packager
+      - name: Install packager
         run: python -m pip install --disable-pip-version-check pyinstaller
 
-      - name: Build Windows preview
+      - name: Build Windows inventory runner
         run: >-
           pyinstaller --noconfirm --clean --windowed
-          --name PC-Backup-Vault-ProjectFinder-Vorschau
+          --name PC-Backup-Vault-Inventur
           PROJECT_FINDER_VORSCHAU.py
 
-      - name: Add preview notice
+      - name: Add safety and usage notice
         shell: pwsh
         run: |
           @'
-          PC Backup Vault - Project-Finder Vorschau
-          =========================================
-          Dies ist eine isolierte Sichtungs-/Entwicklungsversion.
-          Sie ersetzt die vorhandene PC-Backup-Vault-Installation nicht.
-          Start: PC-Backup-Vault-ProjectFinder-Vorschau.exe
-          '@ | Set-Content -Encoding UTF8 'dist/PC-Backup-Vault-ProjectFinder-Vorschau/LESE_MICH.txt'
+          PC Backup Vault - Produktive Inventur
+          =====================================
+          Start: PC-Backup-Vault-Inventur.exe
 
-      - name: Upload Windows preview
+          Der Scan ist read-only und inventarisiert Dateien einschließlich SHA-256 bis 64 MB.
+          Ergebnisse unterscheiden: Zu Git, Git prüfen, lokal behalten, prüfen und Quarantäne-Kandidat.
+          Nur bit-identische SHA-256-Dubletten dürfen nach ausdrücklicher Freigabe in Quarantäne verschoben werden.
+          Es erfolgt keine automatische endgültige Löschung und keine automatische Git-Veröffentlichung.
+          Bestehende Backup-/B2-Funktionen werden durch diesen isolierten Runner nicht verändert.
+          '@ | Set-Content -Encoding UTF8 'dist/PC-Backup-Vault-Inventur/LESE_MICH.txt'
+
+      - name: Upload Windows inventory runner
         uses: actions/upload-artifact@v4
         with:
-          name: PC-Backup-Vault-ProjectFinder-Vorschau-Windows
-          path: dist/PC-Backup-Vault-ProjectFinder-Vorschau/
+          name: PC-Backup-Vault-Inventur-Windows
+          path: dist/PC-Backup-Vault-Inventur/
           if-no-files-found: error
           retention-days: 14
