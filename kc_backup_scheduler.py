@@ -20,6 +20,12 @@ class ScheduleFrequency(str, Enum):
     MONTHLY = "MONTHLY"
 
 
+class ScheduleAction(str, Enum):
+    BACKUP = "BACKUP"
+    VERIFY = "VERIFY"
+    RESTORE_TEST = "RESTORE_TEST"
+
+
 @dataclass(frozen=True)
 class BackupSafetyProfile:
     name: str
@@ -69,6 +75,7 @@ class BackupScheduleJob:
     start_date: date
     start_time: time
     frequency: ScheduleFrequency = ScheduleFrequency.DAILY
+    action: ScheduleAction = ScheduleAction.BACKUP
     enabled: bool = True
     weekday: int | None = None
     day_of_month: int | None = None
@@ -79,6 +86,10 @@ class BackupScheduleJob:
     def __post_init__(self) -> None:
         if not self.program_id.strip():
             raise ValueError("program_id darf nicht leer sein")
+        if not isinstance(self.frequency, ScheduleFrequency):
+            self.frequency = ScheduleFrequency(self.frequency)
+        if not isinstance(self.action, ScheduleAction):
+            self.action = ScheduleAction(self.action)
         if self.frequency == ScheduleFrequency.WEEKLY:
             if self.weekday is None:
                 self.weekday = self.start_date.weekday()
@@ -125,6 +136,7 @@ class CalendarEntry:
     starts_at: datetime
     display_name: str
     security_level: str
+    action: ScheduleAction
 
 
 def build_calendar(jobs: Iterable[BackupScheduleJob], window_start: date, window_end: date) -> list[CalendarEntry]:
@@ -138,9 +150,10 @@ def build_calendar(jobs: Iterable[BackupScheduleJob], window_start: date, window
                     starts_at=occurrence,
                     display_name=job.display_name,
                     security_level=job.profile.security_level,
+                    action=job.action,
                 )
             )
-    return sorted(entries, key=lambda item: (item.starts_at, item.program_id, item.job_id))
+    return sorted(entries, key=lambda item: (item.starts_at, item.program_id, item.action.value, item.job_id))
 
 
 def default_recurring_jobs(program_id: str, *, backup_time: time = time(2, 0)) -> tuple[BackupScheduleJob, ...]:
@@ -155,6 +168,7 @@ def default_recurring_jobs(program_id: str, *, backup_time: time = time(2, 0)) -
             start_date=today,
             start_time=backup_time,
             frequency=ScheduleFrequency.DAILY,
+            action=ScheduleAction.BACKUP,
             display_name="Tägliche sichere Sicherung",
         ),
         BackupScheduleJob(
@@ -163,6 +177,7 @@ def default_recurring_jobs(program_id: str, *, backup_time: time = time(2, 0)) -
             start_time=time(3, 0),
             frequency=ScheduleFrequency.WEEKLY,
             weekday=6,
+            action=ScheduleAction.VERIFY,
             display_name="Wöchentliche Vollprüfung",
         ),
         BackupScheduleJob(
@@ -171,6 +186,7 @@ def default_recurring_jobs(program_id: str, *, backup_time: time = time(2, 0)) -
             start_time=time(4, 0),
             frequency=ScheduleFrequency.MONTHLY,
             day_of_month=1,
+            action=ScheduleAction.RESTORE_TEST,
             display_name="Monatlicher Restore-Test",
         ),
     )
