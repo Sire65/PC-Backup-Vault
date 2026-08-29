@@ -1,0 +1,75 @@
+name: Windows Release veröffentlichen
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Version gegen Tag prüfen
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          $cfg = Get-Content config_store.py -Raw
+          $iss = Get-Content installer/PC_Backup_Vault.iss -Raw
+          if ($cfg -notmatch ('APP_VERSION = "' + [regex]::Escape($version) + '"')) { throw "APP_VERSION passt nicht zum Release-Tag $tag" }
+          if ($iss -notmatch ('MyAppVersion "' + [regex]::Escape($version) + '"')) { throw "Installer-Version passt nicht zum Release-Tag $tag" }
+
+      - name: Abhängigkeiten installieren
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Regression
+        shell: pwsh
+        run: |
+          python -m compileall -q app.py auto_updater.py update_ui.py project_finder
+          python -m unittest discover -s project_finder/tests -p "test_*.py"
+          python -m unittest discover -s tests -p "test_*.py"
+
+      - name: PC Backup Vault bauen
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
+
+      - name: Inno Setup installieren
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Setup und SHA-256 erzeugen
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
+          $setup = "installer\output\PC_Backup_Vault_${version}_Setup.exe"
+          if (-not (Test-Path $setup)) { throw "Setup EXE wurde nicht erzeugt: $setup" }
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          "$hash  PC_Backup_Vault_${version}_Setup.exe" | Set-Content -Encoding ascii ($setup + ".sha256")
+
+      - name: GitHub Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            installer/output/PC_Backup_Vault_*_Setup.exe
+            installer/output/PC_Backup_Vault_*_Setup.exe.sha256
