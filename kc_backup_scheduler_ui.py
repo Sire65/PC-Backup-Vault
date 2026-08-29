@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar
 import tkinter as tk
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from tkinter import messagebox, ttk
 from typing import Callable, Iterable
 
@@ -28,14 +28,55 @@ FREQUENCY_LABELS = {
     ScheduleFrequency.WEEKLY: "Wöchentlich",
     ScheduleFrequency.MONTHLY: "Monatlich",
 }
+VIEW_DAY = "Tag"
+VIEW_WEEK = "Woche"
+VIEW_MONTH = "Monat"
+VIEW_VALUES = (VIEW_DAY, VIEW_WEEK, VIEW_MONTH)
+GERMAN_MONTHS = (
+    "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+)
+
+
+def view_window(anchor: date, view: str) -> tuple[date, date]:
+    if view == VIEW_DAY:
+        return anchor, anchor
+    if view == VIEW_WEEK:
+        start = anchor - timedelta(days=anchor.weekday())
+        return start, start + timedelta(days=6)
+    if view == VIEW_MONTH:
+        first = anchor.replace(day=1)
+        last = anchor.replace(day=calendar.monthrange(anchor.year, anchor.month)[1])
+        return first, last
+    raise ValueError(f"Unbekannte Kalenderansicht: {view}")
+
+
+def move_anchor(anchor: date, view: str, delta: int) -> date:
+    if view == VIEW_DAY:
+        return anchor + timedelta(days=delta)
+    if view == VIEW_WEEK:
+        return anchor + timedelta(days=7 * delta)
+    if view == VIEW_MONTH:
+        absolute = anchor.year * 12 + (anchor.month - 1) + delta
+        year, month0 = divmod(absolute, 12)
+        month = month0 + 1
+        day = min(anchor.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
+    raise ValueError(f"Unbekannte Kalenderansicht: {view}")
+
+
+def experience_permissions(level: BackupExperience | str) -> dict[str, bool]:
+    level = level if isinstance(level, BackupExperience) else BackupExperience(level)
+    return {
+        "edit_jobs": level in {BackupExperience.ADVANCED, BackupExperience.EXPERT},
+        "show_job_list": True,
+        "show_technical_details": level == BackupExperience.EXPERT,
+        "maximum_security_locked": True,
+    }
 
 
 class SchedulerModel:
-    """In-memory scheduler state for the first UI integration stage.
-
-    It deliberately does not execute jobs. Persisting and dispatching are separate
-    integration steps so opening the calendar can never start a backup by accident.
-    """
+    """Scheduler state only; displaying the calendar never dispatches a job."""
 
     def __init__(self, jobs: Iterable[BackupScheduleJob] = ()):
         self.jobs = list(jobs)
@@ -53,17 +94,20 @@ class SchedulerModel:
                 return
         raise KeyError(job_id)
 
+    def calendar_range(self, start: date, end: date):
+        return build_calendar(self.jobs, start, end)
+
     def calendar_entries(self, year: int, month: int):
         first = date(year, month, 1)
         last = date(year, month, calendar.monthrange(year, month)[1])
-        return build_calendar(self.jobs, first, last)
+        return self.calendar_range(first, last)
 
 
 class BackupSchedulerWindow(tk.Toplevel):
     """Simple-first calendar and job assistant for Backup Central.
 
-    on_one_touch receives a OneTouchBackupPlan only after the user presses the
-    explicit button. No backup engine is imported or called by this window.
+    The window never imports or calls the productive backup engine. One-Touch is
+    delegated only after an explicit button press.
     """
 
     def __init__(
@@ -78,10 +122,9 @@ class BackupSchedulerWindow(tk.Toplevel):
         self.program_id = program_id
         self.model = SchedulerModel(jobs or default_recurring_jobs(program_id))
         self.on_one_touch = on_one_touch
-        today = date.today()
-        self.year = today.year
-        self.month = today.month
+        self.anchor_date = date.today()
         self.experience = tk.StringVar(value=BackupExperience.SIMPLE.value)
+        self.view_mode = tk.StringVar(value=VIEW_MONTH)
         self.title("Backup Central – Kalender & Jobs")
         self.geometry("1240x820")
         self.minsize(980, 680)
@@ -93,29 +136,37 @@ class BackupSchedulerWindow(tk.Toplevel):
         head.pack(fill="x")
         ttk.Label(head, text="Backup Central", font=("Segoe UI", 18, "bold")).pack(side="left")
         ttk.Label(head, text="Einfach sichern · Jobs planen · Kalender prüfen").pack(side="left", padx=16)
-        ttk.Combobox(
+        self.experience_combo = ttk.Combobox(
             head,
             state="readonly",
             width=12,
             textvariable=self.experience,
             values=[item.value for item in BackupExperience],
-        ).pack(side="right")
+        )
+        self.experience_combo.pack(side="right")
+        self.experience_combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_experience())
+        ttk.Label(head, text="Bedienebene:").pack(side="right", padx=(0, 6))
 
         one = ttk.LabelFrame(self, text="One-Touch", padding=12)
         one.pack(fill="x", padx=12, pady=(0, 10))
         ttk.Button(one, text="Jetzt sicher sichern", command=self._one_touch).pack(side="left")
-        ttk.Label(
-            one,
-            text="Probelauf → Sicherung → Vollprüfung → Sicherungspunkt → Protokoll",
-        ).pack(side="left", padx=16)
+        ttk.Label(one, text="Probelauf → Sicherung → Vollprüfung → Sicherungspunkt → Protokoll").pack(side="left", padx=16)
+        ttk.Label(one, text="Sicherheitsprofil: KC MAXIMUM (fest)").pack(side="right")
 
         toolbar = ttk.Frame(self, padding=(12, 2))
         toolbar.pack(fill="x")
-        ttk.Button(toolbar, text="‹", width=4, command=lambda: self._move_month(-1)).pack(side="left")
-        self.month_label = ttk.Label(toolbar, font=("Segoe UI", 13, "bold"))
-        self.month_label.pack(side="left", padx=10)
-        ttk.Button(toolbar, text="›", width=4, command=lambda: self._move_month(1)).pack(side="left")
-        ttk.Button(toolbar, text="Neuer Job", command=self._new_job).pack(side="right")
+        ttk.Button(toolbar, text="‹", width=4, command=lambda: self._move(-1)).pack(side="left")
+        self.period_label = ttk.Label(toolbar, font=("Segoe UI", 13, "bold"))
+        self.period_label.pack(side="left", padx=10)
+        ttk.Button(toolbar, text="›", width=4, command=lambda: self._move(1)).pack(side="left")
+        ttk.Button(toolbar, text="Heute", command=self._today).pack(side="left", padx=(8, 0))
+
+        self.view_combo = ttk.Combobox(toolbar, state="readonly", width=10, textvariable=self.view_mode, values=VIEW_VALUES)
+        self.view_combo.pack(side="right", padx=(8, 0))
+        self.view_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
+        ttk.Label(toolbar, text="Ansicht:").pack(side="right")
+        self.btn_new_job = ttk.Button(toolbar, text="Neuer Job", command=self._new_job)
+        self.btn_new_job.pack(side="right", padx=(0, 14))
 
         body = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12, pady=8)
@@ -126,47 +177,98 @@ class BackupSchedulerWindow(tk.Toplevel):
 
         self.job_tree = ttk.Treeview(
             self.jobs_frame,
-            columns=("enabled", "program", "action", "frequency", "when"),
+            columns=("enabled", "program", "action", "frequency", "when", "security"),
             show="headings",
             height=18,
         )
         for key, text, width in (
             ("enabled", "Aktiv", 55),
-            ("program", "Programm", 130),
-            ("action", "Job", 100),
-            ("frequency", "Rhythmus", 100),
+            ("program", "Programm", 120),
+            ("action", "Job", 95),
+            ("frequency", "Rhythmus", 95),
             ("when", "Start", 120),
+            ("security", "Sicherheit", 85),
         ):
             self.job_tree.heading(key, text=text)
             self.job_tree.column(key, width=width, anchor="w")
         self.job_tree.pack(fill="both", expand=True)
+        self.job_tree.bind("<<TreeviewSelect>>", lambda _e: self._render_expert_detail())
+
         buttons = ttk.Frame(self.jobs_frame)
         buttons.pack(fill="x", pady=(8, 0))
-        ttk.Button(buttons, text="Aktiv/Pause", command=self._toggle_selected).pack(side="left")
-        ttk.Button(buttons, text="Entfernen", command=self._remove_selected).pack(side="left", padx=6)
+        self.btn_toggle = ttk.Button(buttons, text="Aktiv/Pause", command=self._toggle_selected)
+        self.btn_toggle.pack(side="left")
+        self.btn_remove = ttk.Button(buttons, text="Entfernen", command=self._remove_selected)
+        self.btn_remove.pack(side="left", padx=6)
+        self.expert_detail = ttk.Label(self.jobs_frame, text="", wraplength=420)
+        self.expert_detail.pack(fill="x", pady=(8, 0))
 
         self.status = ttk.Label(self, text="", padding=(12, 6))
         self.status.pack(fill="x")
 
     def refresh(self):
-        self.month_label.configure(text=f"{calendar.month_name[self.month]} {self.year}")
+        self._update_period_label()
         self._render_calendar()
         self._render_jobs()
-        self.status.configure(text=f"{len(self.model.jobs)} geplante Jobs · keine automatische Ausführung aus dieser Ansicht")
+        self._apply_experience()
+
+    def _update_period_label(self):
+        start, end = view_window(self.anchor_date, self.view_mode.get())
+        if start == end:
+            text = f"{start:%d.%m.%Y}"
+        elif self.view_mode.get() == VIEW_WEEK:
+            text = f"{start:%d.%m.%Y} – {end:%d.%m.%Y}"
+        else:
+            text = f"{GERMAN_MONTHS[start.month]} {start.year}"
+        self.period_label.configure(text=text)
 
     def _render_calendar(self):
         for child in self.cal.winfo_children():
             child.destroy()
+        start, end = view_window(self.anchor_date, self.view_mode.get())
+        entries = self.model.calendar_range(start, end)
+        if self.view_mode.get() == VIEW_DAY:
+            self._render_day(start, entries)
+        elif self.view_mode.get() == VIEW_WEEK:
+            self._render_week(start, entries)
+        else:
+            self._render_month(start, entries)
+
+    def _entry_text(self, entry, *, include_date=False):
+        prefix = f"{entry.starts_at:%d.%m.} " if include_date else ""
+        return f"{prefix}{entry.starts_at:%H:%M}  {ACTION_LABELS[entry.action]}\n{entry.program_id}"
+
+    def _render_day(self, day: date, entries):
+        ttk.Label(self.cal, text=f"{day:%A, %d.%m.%Y}", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        if not entries:
+            ttk.Label(self.cal, text="Keine geplanten Jobs an diesem Tag.").pack(anchor="w")
+            return
+        for entry in entries:
+            box = ttk.LabelFrame(self.cal, text=f"{entry.starts_at:%H:%M} · {ACTION_LABELS[entry.action]}", padding=8)
+            box.pack(fill="x", pady=3)
+            ttk.Label(box, text=f"{entry.display_name}\nProgramm: {entry.program_id}").pack(anchor="w")
+
+    def _render_week(self, monday: date, entries):
+        by_date: dict[date, list] = {}
+        for entry in entries:
+            by_date.setdefault(entry.starts_at.date(), []).append(entry)
+        for col in range(7):
+            day = monday + timedelta(days=col)
+            self.cal.columnconfigure(col, weight=1, uniform="weekday")
+            cell = ttk.LabelFrame(self.cal, text=f"{('Mo','Di','Mi','Do','Fr','Sa','So')[col]} {day:%d.%m.}", padding=5)
+            cell.grid(row=0, column=col, sticky="nsew", padx=2, pady=2)
+            for entry in by_date.get(day, []):
+                ttk.Label(cell, text=self._entry_text(entry), justify="left", wraplength=135).pack(anchor="w", fill="x", pady=2)
+        self.cal.rowconfigure(0, weight=1)
+
+    def _render_month(self, first: date, entries):
         for col, name in enumerate(("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")):
             ttk.Label(self.cal, text=name, anchor="center", font=("Segoe UI", 9, "bold")).grid(row=0, column=col, sticky="ew", padx=2, pady=2)
             self.cal.columnconfigure(col, weight=1, uniform="day")
-
-        entries = self.model.calendar_entries(self.year, self.month)
         by_day: dict[int, list] = {}
         for entry in entries:
             by_day.setdefault(entry.starts_at.day, []).append(entry)
-
-        weeks = calendar.Calendar(firstweekday=0).monthdayscalendar(self.year, self.month)
+        weeks = calendar.Calendar(firstweekday=0).monthdayscalendar(first.year, first.month)
         for row, week in enumerate(weeks, start=1):
             self.cal.rowconfigure(row, weight=1, uniform="week")
             for col, day in enumerate(week):
@@ -175,33 +277,72 @@ class BackupSchedulerWindow(tk.Toplevel):
                 if not day:
                     continue
                 for entry in by_day.get(day, [])[:4]:
-                    label = f"{entry.starts_at:%H:%M} {ACTION_LABELS[entry.action]}\n{entry.program_id}"
-                    ttk.Label(cell, text=label, justify="left").pack(anchor="w", fill="x", pady=1)
+                    ttk.Label(cell, text=self._entry_text(entry), justify="left").pack(anchor="w", fill="x", pady=1)
                 extra = len(by_day.get(day, [])) - 4
                 if extra > 0:
                     ttk.Label(cell, text=f"+ {extra} weitere").pack(anchor="w")
 
     def _render_jobs(self):
-        for item in self.job_tree.get_children():
-            self.job_tree.delete(item)
+        self.job_tree.delete(*self.job_tree.get_children())
         for job in self.model.jobs:
             self.job_tree.insert(
-                "",
-                "end",
-                iid=job.job_id,
+                "", "end", iid=job.job_id,
                 values=(
                     "Ja" if job.enabled else "Pause",
                     job.program_id,
                     ACTION_LABELS[job.action],
                     FREQUENCY_LABELS[job.frequency],
                     f"{job.start_date:%d.%m.%Y} {job.start_time:%H:%M}",
+                    job.profile.security_level,
                 ),
             )
+        self._render_expert_detail()
+
+    def _apply_experience(self):
+        permissions = experience_permissions(self.experience.get())
+        state = "normal" if permissions["edit_jobs"] else "disabled"
+        self.btn_new_job.configure(state=state)
+        self.btn_toggle.configure(state=state)
+        self.btn_remove.configure(state=state)
+        if permissions["show_technical_details"]:
+            self.expert_detail.pack(fill="x", pady=(8, 0))
+        else:
+            self.expert_detail.pack_forget()
+        level = BackupExperience(self.experience.get())
+        if level == BackupExperience.SIMPLE:
+            hint = "SIMPLE: One-Touch und Kalender · Jobänderungen sind geschützt."
+        elif level == BackupExperience.ADVANCED:
+            hint = "ADVANCED: Scheduler bearbeiten · Sicherheitsprofil KC MAXIMUM bleibt fest."
+        else:
+            hint = "EXPERT: technische Jobdetails sichtbar · Sicherheitsgrenzen bleiben fest."
+        self.status.configure(text=f"{len(self.model.jobs)} geplante Jobs · {hint} · keine automatische Ausführung aus dieser Ansicht")
+        self._render_expert_detail()
+
+    def _render_expert_detail(self):
+        if self.experience.get() != BackupExperience.EXPERT.value:
+            return
+        job_id = self._selected_job_id()
+        if not job_id:
+            self.expert_detail.configure(text="EXPERT: Job auswählen für technische Details.")
+            return
+        job = next((item for item in self.model.jobs if item.job_id == job_id), None)
+        if not job:
+            return
+        self.expert_detail.configure(
+            text=f"Job-ID: {job.job_id} · Action: {job.action.value} · Frequency: {job.frequency.value} · "
+                 f"Security: {job.profile.security_level} · Silent Restore: {'JA' if job.profile.allow_silent_restore else 'NEIN'}"
+        )
+
+    def _move(self, delta: int):
+        self.anchor_date = move_anchor(self.anchor_date, self.view_mode.get(), delta)
+        self.refresh()
 
     def _move_month(self, delta: int):
-        absolute = self.year * 12 + (self.month - 1) + delta
-        self.year, month0 = divmod(absolute, 12)
-        self.month = month0 + 1
+        self.anchor_date = move_anchor(self.anchor_date, VIEW_MONTH, delta)
+        self.refresh()
+
+    def _today(self):
+        self.anchor_date = date.today()
         self.refresh()
 
     def _one_touch(self):
@@ -221,6 +362,8 @@ class BackupSchedulerWindow(tk.Toplevel):
         return selection[0] if selection else None
 
     def _toggle_selected(self):
+        if not experience_permissions(self.experience.get())["edit_jobs"]:
+            return
         job_id = self._selected_job_id()
         if not job_id:
             return
@@ -229,6 +372,8 @@ class BackupSchedulerWindow(tk.Toplevel):
         self.refresh()
 
     def _remove_selected(self):
+        if not experience_permissions(self.experience.get())["edit_jobs"]:
+            return
         job_id = self._selected_job_id()
         if not job_id:
             return
@@ -236,6 +381,8 @@ class BackupSchedulerWindow(tk.Toplevel):
         self.refresh()
 
     def _new_job(self):
+        if not experience_permissions(self.experience.get())["edit_jobs"]:
+            return
         JobAssistant(self, on_save=self._save_job, default_program_id=self.program_id)
 
     def _save_job(self, job: BackupScheduleJob):
