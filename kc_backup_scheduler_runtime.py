@@ -27,12 +27,34 @@ class ScheduledDispatch:
         return f"{self.job_id}@{self.scheduled_at.isoformat(timespec='seconds')}"
 
 
+@dataclass(frozen=True)
+class SchedulerRuntimeSummary:
+    last_tick_at: str | None = None
+    paused_reason: str | None = None
+    due_count: int = 0
+    last_started_at: str | None = None
+    last_started_program: str | None = None
+    last_success_at: str | None = None
+    last_success_program: str | None = None
+    last_blocked_at: str | None = None
+    last_blocked_program: str | None = None
+    last_blocked_message: str | None = None
+    last_failed_at: str | None = None
+    last_failed_program: str | None = None
+    last_failed_message: str | None = None
+
+
+def _empty_store() -> dict:
+    return {"store_version": STORE_VERSION, "meta": {}, "occurrences": {}}
+
+
 def _read(path: Path) -> dict:
     if not path.exists():
-        return {"store_version": STORE_VERSION, "occurrences": {}}
+        return _empty_store()
     raw = json.loads(path.read_text(encoding="utf-8"))
     if int(raw.get("store_version", 0)) != STORE_VERSION:
         raise ValueError("Unbekannte Scheduler-Runtime-Speicherversion")
+    raw.setdefault("meta", {})
     raw.setdefault("occurrences", {})
     return raw
 
@@ -69,6 +91,25 @@ def due_dispatches(
         if due:
             result.append(ScheduledDispatch(job.job_id, job.program_id, job.action, max(due)))
     return sorted(result, key=lambda item: (item.scheduled_at, item.program_id, item.action.value, item.job_id))
+
+
+def record_scheduler_tick(
+    path: str | Path,
+    *,
+    now: datetime,
+    paused_reason: str | None = None,
+    due_count: int = 0,
+) -> None:
+    """Write a lightweight heartbeat used only for scheduler observability."""
+    target = Path(path)
+    with _LOCK:
+        raw = _read(target)
+        raw["meta"] = {
+            "last_tick_at": now.replace(tzinfo=None).isoformat(timespec="seconds"),
+            "paused_reason": str(paused_reason) if paused_reason else None,
+            "due_count": max(0, int(due_count)),
+        }
+        _write(target, raw)
 
 
 def claim_dispatch(
@@ -140,3 +181,39 @@ def occurrence_state(path: str | Path, dispatch: ScheduledDispatch) -> str | Non
         raw = _read(Path(path))
         item = raw["occurrences"].get(dispatch.occurrence_key)
         return str(item.get("state")) if item else None
+
+
+def runtime_summary(path: str | Path) -> SchedulerRuntimeSummary:
+    """Return read-only scheduler health without mutating or dispatching anything."""
+    with _LOCK:
+        raw = _read(Path(path))
+    meta = dict(raw.get("meta") or {})
+    entries = list(dict(raw.get("occurrences") or {}).values())
+
+    def latest(state: str):
+        matches = [item for item in entries if str(item.get("state") or "").upper() == state]
+        if not matches:
+            return None
+        def stamp(item):
+            return str(item.get("finished_at") or item.get("claimed_at") or "")
+        return max(matches, key=stamp)
+
+    started = latest("RUNNING") or latest("CLAIMED")
+    success = latest("SUCCESS")
+    blocked = latest("BLOCKED")
+    failed = latest("FAILED")
+    return SchedulerRuntimeSummary(
+        last_tick_at=meta.get("last_tick_at"),
+        paused_reason=meta.get("paused_reason"),
+        due_count=int(meta.get("due_count") or 0),
+        last_started_at=(started or {}).get("claimed_at"),
+        last_started_program=(started or {}).get("program_id"),
+        last_success_at=(success or {}).get("finished_at"),
+        last_success_program=(success or {}).get("program_id"),
+        last_blocked_at=(blocked or {}).get("finished_at"),
+        last_blocked_program=(blocked or {}).get("program_id"),
+        last_blocked_message=(blocked or {}).get("message"),
+        last_failed_at=(failed or {}).get("finished_at"),
+        last_failed_program=(failed or {}).get("program_id"),
+        last_failed_message=(failed or {}).get("message"),
+    )
