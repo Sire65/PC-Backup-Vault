@@ -1,7 +1,8 @@
-"""Isolierter Vorschau-Start für den Project Finder.
+"""Produktiver, isolierter Start für die PC Backup Vault Inventur.
 
-Ändert weder Backup-Konfiguration noch B2-Verhalten. Die Vorschau startet nur den
-neuen Inventar-/Analyse-Arbeitsbereich auf dem Entwicklungsbranch.
+Der Runner scannt/vergleicht und erzeugt Empfehlungen. Bestehende Backup-Konfiguration,
+Backup-Engine und B2-Verhalten werden nicht verändert. Endgültiges Löschen erfolgt nie
+automatisch; sichere Dubletten können nur nach Benutzerfreigabe in Quarantäne verschoben werden.
 """
 import tkinter as tk
 from tkinter import ttk
@@ -11,9 +12,9 @@ from project_finder.ui_workspace import ProjectInventoryWorkspace
 
 def main():
     root = tk.Tk()
-    root.title("PC Backup Vault – Projekt-Finder Vorschau")
-    root.geometry("1280x800")
-    root.minsize(980, 620)
+    root.title("PC Backup Vault – Produktive Inventur")
+    root.geometry("1380x860")
+    root.minsize(1024, 680)
     style = ttk.Style(root)
     try:
         style.theme_use("vista")
