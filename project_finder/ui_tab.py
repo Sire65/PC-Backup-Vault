@@ -6,6 +6,7 @@ from pathlib import Path
 from tkinter import BOTH, END, LEFT, RIGHT, X, BooleanVar, DoubleVar, StringVar, filedialog, messagebox, ttk
 
 from .decision_engine import classify_inventory, export_inventory_csv, export_inventory_json, inventory_summary
+from .git_handoff import create_git_handoff
 from .scanner import cleanup_candidates, count_scan_files, quarantine, scan
 
 
@@ -62,7 +63,8 @@ class ProjectFinderTab(ttk.Frame):
         actions = ttk.Frame(self); actions.pack(fill=X, padx=12, pady=(0,12))
         ttk.Button(actions, text='Zusammenfassung kopieren', command=self.copy_summary).pack(side=LEFT, padx=(0,6))
         ttk.Button(actions, text='Inventur JSON', command=lambda:self.export('json')).pack(side=LEFT, padx=(0,6))
-        ttk.Button(actions, text='Inventur CSV', command=lambda:self.export('csv')).pack(side=LEFT, padx=(0,16))
+        ttk.Button(actions, text='Inventur CSV', command=lambda:self.export('csv')).pack(side=LEFT, padx=(0,6))
+        ttk.Button(actions, text='Git-Übergabepaket erstellen…', command=self.create_git_package).pack(side=LEFT, padx=(0,16))
         ttk.Button(actions, text='Sichere Dubletten in Quarantäne…', command=self.quarantine_selected).pack(side=RIGHT)
 
     def add_folder(self):
@@ -78,66 +80,38 @@ class ProjectFinderTab(ttk.Frame):
 
     @staticmethod
     def _fmt_eta(seconds: float | None) -> str:
-        if seconds is None or seconds < 0 or seconds == float('inf'):
-            return '—'
+        if seconds is None or seconds < 0 or seconds == float('inf'): return '—'
         sec = int(round(seconds))
         if sec < 60: return f'{sec} s'
         minutes, sec = divmod(sec, 60)
         if minutes < 60: return f'{minutes} min {sec:02d} s'
-        hours, minutes = divmod(minutes, 60)
-        return f'{hours} h {minutes:02d} min'
+        hours, minutes = divmod(minutes, 60); return f'{hours} h {minutes:02d} min'
 
     def _set_progress(self, done: int, path: str = ''):
-        total = max(0, int(self.scan_total))
-        done = max(0, int(done))
-        pct = min(100.0, (done / total * 100.0) if total else 0.0)
-        rest = max(0, total - done)
-        elapsed = max(0.0, time.monotonic() - self.scan_started) if self.scan_started else 0.0
-        eta = None
-        if done > 0 and elapsed > 0 and rest > 0:
-            eta = elapsed / done * rest
-        elif total and rest == 0:
-            eta = 0.0
-        self.progress_var.set(pct)
-        self.progress_text.set(f'{pct:5.1f} % · {done:,} / {total:,} Dateien · Rest {rest:,} · Restzeit {self._fmt_eta(eta)}')
-        if path:
-            self.status_var.set(f'Inventur läuft · {done:,}/{total:,} · {path}')
+        total=max(0,int(self.scan_total)); done=max(0,int(done)); pct=min(100.0,(done/total*100.0) if total else 0.0); rest=max(0,total-done)
+        elapsed=max(0.0,time.monotonic()-self.scan_started) if self.scan_started else 0.0; eta=None
+        if done>0 and elapsed>0 and rest>0: eta=elapsed/done*rest
+        elif total and rest==0: eta=0.0
+        self.progress_var.set(pct); self.progress_text.set(f'{pct:5.1f} % · {done:,} / {total:,} Dateien · Rest {rest:,} · Restzeit {self._fmt_eta(eta)}')
+        if path: self.status_var.set(f'Inventur läuft · {done:,}/{total:,} · {path}')
 
     def start_scan(self):
-        if not self.roots:
-            messagebox.showinfo('Projekt-Finder','Bitte zuerst mindestens ein Laufwerk oder Verzeichnis auswählen.'); return
-        self.stop_flag=False; self.items=[]; self.tree.delete(*self.tree.get_children())
-        self.scan_total=0; self.scan_started=0.0; self.progress_var.set(0.0)
-        self.progress_text.set('Vorprüfung · Dateien werden gezählt…')
-        self.status_var.set('Vorprüfung läuft · Nur Lesen · Dateianzahl wird ermittelt')
+        if not self.roots: messagebox.showinfo('Projekt-Finder','Bitte zuerst mindestens ein Laufwerk oder Verzeichnis auswählen.'); return
+        self.stop_flag=False; self.items=[]; self.tree.delete(*self.tree.get_children()); self.scan_total=0; self.scan_started=0.0; self.progress_var.set(0.0)
+        self.progress_text.set('Vorprüfung · Dateien werden gezählt…'); self.status_var.set('Vorprüfung läuft · Nur Lesen · Dateianzahl wird ermittelt')
         threading.Thread(target=self._scan_worker,daemon=True).start()
 
     def _scan_worker(self):
         try:
-            total=count_scan_files(
-                self.roots,
-                progress=lambda n,p:self.after(0, lambda n=n,p=p: self.status_var.set(f'Vorprüfung · mindestens {n:,} Dateien gefunden · {p}')),
-                stop_requested=lambda:self.stop_flag,
-            )
-            if self.stop_flag:
-                self.after(0, lambda:self.status_var.set('Inventur abgebrochen · keine Quelldatei verändert'))
-                return
-            self.scan_total=total
-            self.scan_started=time.monotonic()
-            self.after(0, lambda:self._set_progress(0))
-            self.items=scan(
-                self.roots,
-                hash_only_interesting=False,
-                progress=lambda n,p:self.after(0, lambda n=n,p=p:self._set_progress(n,p)),
-                stop_requested=lambda:self.stop_flag,
-            )
+            total=count_scan_files(self.roots,progress=lambda n,p:self.after(0,lambda n=n,p=p:self.status_var.set(f'Vorprüfung · mindestens {n:,} Dateien gefunden · {p}')),stop_requested=lambda:self.stop_flag)
+            if self.stop_flag: self.after(0,lambda:self.status_var.set('Inventur abgebrochen · keine Quelldatei verändert')); return
+            self.scan_total=total; self.scan_started=time.monotonic(); self.after(0,lambda:self._set_progress(0))
+            self.items=scan(self.roots,hash_only_interesting=False,progress=lambda n,p:self.after(0,lambda n=n,p=p:self._set_progress(n,p)),stop_requested=lambda:self.stop_flag)
             self.after(0,self._render)
         except Exception as e:
-            self.after(0,lambda:messagebox.showerror('Projekt-Finder',str(e)))
-            self.after(0,lambda:self.status_var.set('Fehler bei Inventur'))
+            self.after(0,lambda:messagebox.showerror('Projekt-Finder',str(e))); self.after(0,lambda:self.status_var.set('Fehler bei Inventur'))
 
-    def stop_scan(self):
-        self.stop_flag=True; self.status_var.set('Abbruch angefordert…')
+    def stop_scan(self): self.stop_flag=True; self.status_var.set('Abbruch angefordert…')
 
     @staticmethod
     def _fmt_size(n:int)->str:
@@ -147,68 +121,51 @@ class ProjectFinderTab(ttk.Frame):
             x/=1024
 
     def _render(self):
-        rows=classify_inventory(self.items); shown=0
-        by_path={row['path']: row for row in rows}
+        rows=classify_inventory(self.items); shown=0; by_path={row['path']:row for row in rows}
         for i in self.items:
-            row=by_path[i.path]
-            relevant = i.duplicate_of or row['git_action'] in {'TO_GIT','REVIEW','NEVER'} or row['inventory_action'] == 'REVIEW' or i.score >= 40
+            row=by_path[i.path]; relevant=i.duplicate_of or row['git_action'] in {'TO_GIT','REVIEW','NEVER'} or row['inventory_action']=='REVIEW' or i.score>=40
             if self.only_kc.get() and not relevant: continue
-            lamp={'GREEN':'🟢','YELLOW':'🟡','BLUE':'🔵','WHITE':'⚪','RED':'🔴'}.get(i.status,'⚪')
-            git_label={'TO_GIT':'Zu Git','REVIEW':'Git prüfen','NO':'Nein','NEVER':'NIE Git'}.get(row['git_action'],row['git_action'])
-            inv_label={'KEEP':'Behalten','KEEP_LOCAL':'Lokal behalten','REVIEW':'Prüfen','QUARANTINE_CANDIDATE':'Quarantäne-Kandidat'}.get(row['inventory_action'],row['inventory_action'])
-            self.tree.insert('',END,values=(lamp,i.name,i.version_hint,i.category,self._fmt_size(i.size),i.modified_iso,git_label,inv_label,f"{row['confidence']} %",i.path))
-            shown+=1
-        summary=inventory_summary(self.items)['counts']
-        done=len(self.items)
-        if self.stop_flag and self.scan_total and done < self.scan_total:
-            self._set_progress(done)
-            self.status_var.set(f"Abgebrochen · {done:,} von {self.scan_total:,} Dateien erfasst · keine Quelldatei verändert")
-        else:
-            self.scan_total=max(self.scan_total, done)
-            self._set_progress(self.scan_total)
-            self.status_var.set(f"Fertig · {summary['files']:,} Dateien · {summary['to_git']:,} zu Git · {summary['quarantine_candidates']:,} sichere Dubletten · {shown:,} angezeigt")
+            lamp={'GREEN':'🟢','YELLOW':'🟡','BLUE':'🔵','WHITE':'⚪','RED':'🔴'}.get(i.status,'⚪'); git_label={'TO_GIT':'Zu Git','REVIEW':'Git prüfen','NO':'Nein','NEVER':'NIE Git'}.get(row['git_action'],row['git_action']); inv_label={'KEEP':'Behalten','KEEP_LOCAL':'Lokal behalten','REVIEW':'Prüfen','QUARANTINE_CANDIDATE':'Quarantäne-Kandidat'}.get(row['inventory_action'],row['inventory_action'])
+            self.tree.insert('',END,values=(lamp,i.name,i.version_hint,i.category,self._fmt_size(i.size),i.modified_iso,git_label,inv_label,f"{row['confidence']} %",i.path)); shown+=1
+        summary=inventory_summary(self.items)['counts']; done=len(self.items)
+        if self.stop_flag and self.scan_total and done<self.scan_total: self._set_progress(done); self.status_var.set(f'Abgebrochen · {done:,} von {self.scan_total:,} Dateien erfasst · keine Quelldatei verändert')
+        else: self.scan_total=max(self.scan_total,done); self._set_progress(self.scan_total); self.status_var.set(f"Fertig · {summary['files']:,} Dateien · {summary['to_git']:,} zu Git · {summary['quarantine_candidates']:,} sichere Dubletten · {shown:,} angezeigt")
 
-    def selected_paths(self):
-        return [self.tree.item(x,'values')[-1] for x in self.tree.selection() if self.tree.item(x,'values')]
+    def selected_paths(self): return [self.tree.item(x,'values')[-1] for x in self.tree.selection() if self.tree.item(x,'values')]
+    def _approved_quarantine_paths(self,paths):
+        proposals={x['path']:x for x in cleanup_candidates(self.items)}; return [p for p in paths if proposals.get(p,{}).get('proposed_action')=='QUARANTINE']
 
-    def _approved_quarantine_paths(self, paths):
-        proposals={x['path']:x for x in cleanup_candidates(self.items)}
-        return [p for p in paths if proposals.get(p,{}).get('proposed_action') == 'QUARANTINE']
+    def create_git_package(self):
+        if not self.items:
+            messagebox.showinfo('Git-Übergabepaket','Bitte zuerst eine Inventur durchführen.'); return
+        stamp=time.strftime('%Y%m%d-%H%M%S')
+        p=filedialog.asksaveasfilename(title='Sicheres Git-Übergabepaket speichern',defaultextension='.zip',initialfile=f'PC-Backup-Vault_Git-Uebergabe_{stamp}.zip',filetypes=[('ZIP-Paket','*.zip')])
+        if not p: return
+        self.status_var.set('Git-Übergabepaket wird erstellt · keine GitHub-Änderung…')
+        try:
+            result=create_git_handoff(self.items,p)
+        except Exception as e:
+            messagebox.showerror('Git-Übergabepaket',f'Paket konnte nicht erstellt werden:\n{e}'); self.status_var.set('Git-Übergabepaket: Fehler'); return
+        included=result['included']; excluded=result['excluded']; self.status_var.set(f'Git-Übergabepaket fertig · {included:,} Dateien · {excluded:,} ausgeschlossen')
+        messagebox.showinfo('Git-Übergabepaket',f'Paket sicher erstellt.\n\nEnthalten: {included:,} Datei(en)\nAusgeschlossen: {excluded:,}\n\nSecrets, Build-/Runtime-Dateien und erkannte Dubletten werden nicht übernommen.\nEs wurde NICHTS nach GitHub geschrieben und main wurde NICHT verändert.\n\n{p}')
 
     def quarantine_selected(self):
         paths=self.selected_paths()
-        if not paths:
-            messagebox.showinfo('Projekt-Finder','Bitte zuerst Dateien markieren.'); return
+        if not paths: messagebox.showinfo('Projekt-Finder','Bitte zuerst Dateien markieren.'); return
         approved=self._approved_quarantine_paths(paths); blocked=len(paths)-len(approved)
-        if not approved:
-            messagebox.showwarning('Sichere Bereinigung','Keine markierte Datei ist als bit-identische SHA-256-Dublette freigegeben. Es wird nichts verschoben.'); return
-        msg=(f'{len(approved)} bit-identische Dublette(n) werden in eine wiederherstellbare Quarantäne verschoben.\n'
-             f'{blocked} andere Datei(en) bleiben unverändert.\n\nEs wird NICHT endgültig gelöscht. Fortfahren?')
+        if not approved: messagebox.showwarning('Sichere Bereinigung','Keine markierte Datei ist als bit-identische SHA-256-Dublette freigegeben. Es wird nichts verschoben.'); return
+        msg=f'{len(approved)} bit-identische Dublette(n) werden in eine wiederherstellbare Quarantäne verschoben.\n{blocked} andere Datei(en) bleiben unverändert.\n\nEs wird NICHT endgültig gelöscht. Fortfahren?'
         if not messagebox.askyesno('Sichere Bereinigung',msg): return
-        manifest=quarantine(approved,self.quarantine_root,reason='user-approved-safe-duplicate')
-        messagebox.showinfo('Sichere Bereinigung',f'{len(manifest)} Datei(en) wurden reversibel quarantänisiert.\nAlle anderen Dateien blieben unverändert.')
-        self.status_var.set(f'Quarantäne: {len(manifest)} sichere Dublette(n) · {blocked} nicht verändert')
+        manifest=quarantine(approved,self.quarantine_root,reason='user-approved-safe-duplicate'); messagebox.showinfo('Sichere Bereinigung',f'{len(manifest)} Datei(en) wurden reversibel quarantänisiert.\nAlle anderen Dateien blieben unverändert.'); self.status_var.set(f'Quarantäne: {len(manifest)} sichere Dublette(n) · {blocked} nicht verändert')
 
     def export(self,kind:str):
-        if not self.items:
-            messagebox.showinfo('Projekt-Finder','Noch keine Inventur vorhanden.'); return
-        ext='.json' if kind=='json' else '.csv'
-        p=filedialog.asksaveasfilename(defaultextension=ext,filetypes=[('JSON','*.json')] if kind=='json' else [('CSV','*.csv')])
+        if not self.items: messagebox.showinfo('Projekt-Finder','Noch keine Inventur vorhanden.'); return
+        ext='.json' if kind=='json' else '.csv'; p=filedialog.asksaveasfilename(defaultextension=ext,filetypes=[('JSON','*.json')] if kind=='json' else [('CSV','*.csv')])
         if not p:return
-        (export_inventory_json if kind=='json' else export_inventory_csv)(self.items,p)
-        self.status_var.set(f'Inventur gespeichert: {p}')
+        (export_inventory_json if kind=='json' else export_inventory_csv)(self.items,p); self.status_var.set(f'Inventur gespeichert: {p}')
 
     def copy_summary(self):
         if not self.items:return
         s=inventory_summary(self.items); c=s['counts']; z=s['sizes']
-        text=(
-            'PC Backup Vault · Produktive Inventur\n'
-            f"Dateien: {c['files']:,}\nGesamtgröße: {self._fmt_size(z['total'])}\n"
-            f"Zu Git: {c['to_git']:,}\nGit prüfen: {c['git_review']:,}\n"
-            f"Lokal behalten: {c['keep_local']:,}\nWeitere Prüffälle: {c['review']:,}\n"
-            f"Niemals Git (Secret-Verdacht): {c['never_git']:,}\n"
-            f"Sichere SHA-256-Dubletten: {c['quarantine_candidates']:,}\n"
-            f"Potentiell durch Quarantäne freigebbar: {self._fmt_size(z['quarantine_candidates'])}\n"
-            'Hinweis: Keine endgültige Löschung erfolgt automatisch.'
-        )
+        text=('PC Backup Vault · Produktive Inventur\n'+f"Dateien: {c['files']:,}\nGesamtgröße: {self._fmt_size(z['total'])}\n"+f"Zu Git: {c['to_git']:,}\nGit prüfen: {c['git_review']:,}\n"+f"Lokal behalten: {c['keep_local']:,}\nWeitere Prüffälle: {c['review']:,}\n"+f"Niemals Git (Secret-Verdacht): {c['never_git']:,}\n"+f"Sichere SHA-256-Dubletten: {c['quarantine_candidates']:,}\n"+f"Potentiell durch Quarantäne freigebbar: {self._fmt_size(z['quarantine_candidates'])}\n"+'Hinweis: Keine endgültige Löschung erfolgt automatisch.')
         self.clipboard_clear(); self.clipboard_append(text); self.status_var.set('Inventur-Zusammenfassung kopiert')
