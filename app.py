@@ -4,9 +4,11 @@ from ui import App
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
+from update_ui import enable_auto_update, schedule_startup_update_check
 
 
 enable_project_finder(App)
+enable_auto_update(App)
 
 
 def _show_already_running():
@@ -35,6 +37,7 @@ def main():
             app._instance_lock = lock
             # KICC telemetry is observation-only and never participates in backup/restore decisions.
             app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn)
+            schedule_startup_update_check(app)
             app.mainloop()
             lock = None  # App owns/released below only if explicit; process exit releases regardless.
         return 0
