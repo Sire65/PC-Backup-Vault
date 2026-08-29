@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from tkinter import BOTH, ttk
+from tkinter import BOTH, X, messagebox, ttk
 
 from .development_dashboard import DevelopmentDashboard
+from .recovery_branch import create_recovery_branches, validate_recovery_preview
 from .ui_changes import ChangesSinceLastTab
 from .ui_git_status import GitStatusTab
 from .ui_job_history import JobHistoryTab
@@ -11,10 +12,10 @@ from .ui_tab import ProjectFinderTab
 
 
 class ProjectInventoryWorkspace(ttk.Frame):
-    """Single host frame for the future PC Backup Vault integration.
+    """Single host frame for the PC Backup Vault Project Finder integration.
 
-    Keeps all new inventory functions behind one isolated tab and does not modify
-    existing backup controls, backup scheduling or B2 backup behavior.
+    Keeps inventory and recovery functions isolated from backup controls,
+    scheduling and B2 backup behavior.
     """
 
     def __init__(
@@ -48,7 +49,92 @@ class ProjectInventoryWorkspace(ttk.Frame):
         self.notebook.add(self.git_status, text="Git / Updates")
         self.notebook.add(self.job_history, text="Planjobs / Verlauf")
 
+        recovery_bar = ttk.Frame(self)
+        recovery_bar.pack(fill=X, padx=12, pady=(0, 10))
+        ttk.Label(
+            recovery_bar,
+            text="Recovery schreibt niemals nach main. Branch-Erzeugung enthält noch keine Dateien.",
+        ).pack(side="left")
+        ttk.Button(
+            recovery_bar,
+            text="Recovery-Branches anlegen…",
+            command=self.create_recovery_branches_from_preview,
+        ).pack(side="right")
+
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    def create_recovery_branches_from_preview(self):
+        preview = self.finder.recovery_preview
+        if not preview:
+            messagebox.showinfo(
+                "Recovery-Branches",
+                "Noch keine Recovery-Vorschau vorhanden.\n\n"
+                "Bitte zuerst Festplatten-Inventur → GitHub-Vergleich → Recovery-Branch Vorschau durchführen.",
+            )
+            return
+
+        groups = preview.get("groups", [])
+        if not groups:
+            messagebox.showinfo(
+                "Recovery-Branches",
+                "Die aktuelle Vorschau enthält keine freigegebenen Recovery-Kandidaten.",
+            )
+            return
+
+        validation_errors = validate_recovery_preview(preview)
+        if validation_errors:
+            messagebox.showwarning(
+                "Recovery-Branches blockiert",
+                "Die Vorschau ist nicht mehr sicher freigabefähig.\n\n"
+                + "\n".join(validation_errors[:8])
+                + "\n\nBitte GitHub-Vergleich und Vorschau erneut durchführen.",
+            )
+            return
+
+        branches = "\n".join(
+            f"• {group['repo']}\n  {group['proposed_branch']} · {group['file_count']} Datei(en) vorgemerkt"
+            for group in groups[:10]
+        )
+        if len(groups) > 10:
+            branches += f"\n• … plus {len(groups) - 10} weitere Repository(s)"
+
+        approved = messagebox.askyesno(
+            "Recovery-Branches wirklich anlegen?",
+            "Jetzt wird erstmals schreibend auf GitHub zugegriffen.\n\n"
+            f"Es werden {len(groups)} neue Recovery-Branch(es) angelegt:\n\n{branches}\n\n"
+            "WICHTIG:\n"
+            "• main/master werden NICHT verändert.\n"
+            "• Es werden NOCH KEINE Dateien hochgeladen.\n"
+            "• Vor dem Schreiben werden alle lokalen SHA-256-Werte erneut geprüft.\n"
+            "• GITHUB_TOKEN wird nur aus der Umgebungsvariable gelesen und nicht gespeichert.\n\n"
+            "Recovery-Branches jetzt anlegen?",
+        )
+        if not approved:
+            return
+
+        try:
+            result = create_recovery_branches(preview)
+        except Exception as exc:
+            messagebox.showerror(
+                "Recovery-Branches",
+                f"Branch-Erzeugung wurde abgebrochen.\n\n{exc}\n\nmain blieb unverändert.",
+            )
+            return
+
+        created = result.get("created", [])
+        failed = result.get("failed", [])
+        self.finder.status_var.set(
+            f"Recovery-Branches · {len(created)} angelegt · {len(failed)} Fehler · 0 Dateien geschrieben · main unverändert"
+        )
+        created_text = "\n".join(f"• {row['repo']}: {row['branch']}" for row in created[:10]) or "Keine Branches angelegt."
+        failed_text = "\n".join(f"• {row['repo']}: {row['error']}" for row in failed[:5])
+        detail = f"\n\nFehler:\n{failed_text}" if failed_text else ""
+        messagebox.showinfo(
+            "Recovery-Branches",
+            f"Angelegt: {len(created)}\nFehler: {len(failed)}\nDateien geschrieben: 0\nmain verändert: NEIN\n\n"
+            f"{created_text}{detail}\n\n"
+            "Der nächste Schritt ist ein separater Datei-Upload in genau diese Recovery-Branches; dafür ist eine weitere Freigabeschranke erforderlich.",
+        )
 
     def _on_tab_changed(self, _event=None):
         current = self.notebook.nametowidget(self.notebook.select())
