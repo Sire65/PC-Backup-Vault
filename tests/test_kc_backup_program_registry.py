@@ -88,6 +88,77 @@ class KCProgramRegistryTests(unittest.TestCase):
             self.assertTrue(scope.ready)
             self.assertEqual(len(scope.warnings), 1)
 
+    def test_raw_sqlite_as_required_export_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_db = Path(tmp) / "live.sqlite"
+            raw_db.write_bytes(b"sqlite")
+            program = KCProgramDefinition(
+                program_id="x",
+                display_name="X",
+                sources=(
+                    BackupSourceDefinition(
+                        "cloud-export", "Cloud Export", SourceKind.DATABASE_EXPORT, configured_path=str(raw_db)
+                    ),
+                ),
+            )
+            scope = resolve_program_scope(program)
+            self.assertFalse(scope.ready)
+            self.assertEqual(scope.paths, ())
+            self.assertTrue(any("Rohdatenbanken" in blocker for blocker in scope.blockers))
+
+    def test_file_configured_for_folder_source_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file_path = Path(tmp) / "not-a-folder.json"
+            file_path.write_text("{}", encoding="utf-8")
+            program = KCProgramDefinition(
+                program_id="x",
+                display_name="X",
+                sources=(
+                    BackupSourceDefinition("program", "Programm", SourceKind.FOLDER, configured_path=str(file_path)),
+                ),
+            )
+            scope = resolve_program_scope(program)
+            self.assertFalse(scope.ready)
+            self.assertTrue(any("Ordner erwartet" in blocker for blocker in scope.blockers))
+
+    def test_safe_json_export_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            export = Path(tmp) / "kc-data-export.json"
+            export.write_text("{}", encoding="utf-8")
+            program = KCProgramDefinition(
+                program_id="x",
+                display_name="X",
+                sources=(
+                    BackupSourceDefinition("data", "Daten Export", SourceKind.LOCAL_EXPORT, configured_path=str(export)),
+                ),
+            )
+            scope = resolve_program_scope(program)
+            self.assertTrue(scope.ready)
+            self.assertEqual(scope.paths, (export,))
+
+    def test_wrong_optional_type_warns_without_becoming_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            required = root / "program"
+            required.mkdir()
+            wrong_optional = root / "documents.txt"
+            wrong_optional.write_text("x", encoding="utf-8")
+            program = KCProgramDefinition(
+                program_id="x",
+                display_name="X",
+                sources=(
+                    BackupSourceDefinition("required", "Programm", SourceKind.FOLDER, configured_path=str(required)),
+                    BackupSourceDefinition(
+                        "documents", "Dokumente", SourceKind.DOCUMENTS, SourceRequirement.OPTIONAL,
+                        configured_path=str(wrong_optional),
+                    ),
+                ),
+            )
+            scope = resolve_program_scope(program)
+            self.assertTrue(scope.ready)
+            self.assertEqual(scope.paths, (required,))
+            self.assertTrue(any("Ordner erwartet" in warning for warning in scope.warnings))
+
     def test_duplicate_program_id_is_rejected(self):
         program = KCProgramDefinition(program_id="x", display_name="X")
         registry = KCProgramRegistry([program])
