@@ -10,6 +10,7 @@ from interrupted_recovery import clear_checkpoint, save_manual_checkpoint, updat
 from kc_backup_engine_adapter import execute_prepared_backup, prepare_one_touch_backup
 from kc_backup_job_store import load_jobs, save_jobs
 from kc_backup_program_registry import default_registry
+from kc_backup_program_status import load_program_statuses, record_program_failure, record_program_success
 from kc_backup_program_store import load_program_registry
 from kc_backup_programs_ui import KCProgramsWindow
 from kc_backup_scheduler_ui import BackupSchedulerWindow
@@ -106,11 +107,16 @@ def enable_backup_central(App):
 
     original_build = App._build
 
+    def _scheduler_path(self):
+        return self.store.path.parent / "KC_BACKUP_SCHEDULER_JOBS.json"
+
+    def _program_status_path(self):
+        return self.store.path.parent / "KC_BACKUP_PROGRAM_STATUS.json"
+
     def open_backup_calendar(self):
-        path = self.store.path.parent / "KC_BACKUP_SCHEDULER_JOBS.json"
         return PersistentBackupSchedulerWindow(
             self,
-            store_path=path,
+            store_path=self._kc_scheduler_path(),
             program_id="pc-backup-vault",
             on_one_touch=lambda _plan: self.run_default_one_touch(),
         )
@@ -119,10 +125,12 @@ def enable_backup_central(App):
         path = self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
         try:
             registry = load_program_registry(path, default_registry())
+            runtime_statuses = load_program_statuses(self._kc_program_status_path())
+            scheduler_jobs = load_jobs(self._kc_scheduler_path())
         except Exception as exc:
             messagebox.showerror(
                 "KC Programme",
-                f"Die gespeicherte Programmkonfiguration konnte nicht sicher gelesen werden.\n\n{exc}\n\n"
+                f"Die gespeicherte Programm-/Statuskonfiguration konnte nicht sicher gelesen werden.\n\n{exc}\n\n"
                 "Es wurde nichts verändert oder gestartet.",
                 parent=self,
             )
@@ -143,6 +151,8 @@ def enable_backup_central(App):
             registry=registry,
             store_path=path,
             on_backup=start_program_backup,
+            runtime_statuses=runtime_statuses,
+            scheduler_jobs=scheduler_jobs,
         )
 
     def secure_one_touch(self, program_id="pc-backup-vault"):
@@ -223,8 +233,16 @@ def enable_backup_central(App):
                     app_version=APP_VERSION,
                 )
                 clear_checkpoint()
-                if getattr(verification, "result", "") != "PASS":
+                verify_result = str(getattr(verification, "result", "") or "").upper()
+                if verify_result != "PASS":
                     raise RuntimeError("Vollsicherung erstellt, aber die verpflichtende FULL-Verifizierung war nicht PASS. Bitte Report prüfen.")
+                if program_id != "pc-backup-vault":
+                    record_program_success(
+                        self._kc_program_status_path(),
+                        program_id=program_id,
+                        job_id=str(job_id or ""),
+                        verify_status=verify_result,
+                    )
                 self.after(0, lambda: self.lbl_progress.config(text=f"One-Touch {program_id} abgeschlossen: Sicherung + FULL-Verify erfolgreich."))
                 try:
                     from ui import JobReportWindow
@@ -247,10 +265,16 @@ def enable_backup_central(App):
             except (LimitBlocked, ChristmasGuard) as exc:
                 clear_checkpoint()
                 msg = str(exc)
+                if program_id != "pc-backup-vault":
+                    try: record_program_failure(self._kc_program_status_path(), program_id=program_id, error=msg)
+                    except Exception: pass
                 self.after(0, lambda m=msg: messagebox.showwarning("One-Touch – Sicherheitssperre", m, parent=self))
             except Exception as exc:
                 clear_checkpoint()
                 msg = str(exc)
+                if program_id != "pc-backup-vault":
+                    try: record_program_failure(self._kc_program_status_path(), program_id=program_id, error=msg)
+                    except Exception: pass
                 self.notify_kc("backup_failed", "One-Touch Backup fehlgeschlagen", msg, "ERROR", {"program_id": program_id})
                 self.after(0, lambda m=msg: messagebox.showerror("One-Touch", f"One-Touch fehlgeschlagen:\n{m}", parent=self))
             finally:
@@ -269,6 +293,8 @@ def enable_backup_central(App):
             calendar_button.pack(side="right", padx=(0, 8))
             self.btn_backup_calendar = calendar_button
 
+    App._kc_scheduler_path = _scheduler_path
+    App._kc_program_status_path = _program_status_path
     App.open_backup_calendar = open_backup_calendar
     App.open_kc_programs = open_kc_programs
     App.run_default_one_touch = secure_one_touch
