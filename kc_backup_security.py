@@ -122,7 +122,16 @@ def guard_restore(*, source_verified: bool, recovery_material_ready: bool, targe
     except OSError as exc:
         blockers.append(f"Restore-Ziel kann nicht sicher aufgeloest werden: {exc}")
 
-    if target_path.exists() and any(target_path.iterdir()) if target_path.is_dir() else target_path.exists():
+    target_has_content = False
+    try:
+        if target_path.is_dir():
+            target_has_content = any(target_path.iterdir())
+        elif target_path.exists():
+            target_has_content = True
+    except (OSError, PermissionError) as exc:
+        blockers.append(f"Restore-Ziel kann nicht sicher gelesen werden: {exc}")
+
+    if target_has_content:
         warnings.append("Restore-Ziel ist nicht leer; Wiederherstellung sollte in ein leeres Staging-Ziel erfolgen.")
 
     return RestoreGuardResult(not blockers, blockers, warnings)
