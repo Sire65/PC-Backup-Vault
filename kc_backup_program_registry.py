@@ -19,6 +19,22 @@ class SourceRequirement(str, Enum):
     OPTIONAL = "OPTIONAL"
 
 
+SAFE_EXPORT_SUFFIXES = {".json", ".csv", ".xlsx", ".xls", ".zip", ".sql", ".dump"}
+RAW_DATABASE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
+
+
+def is_safe_export_path(path: str | Path) -> bool:
+    path = Path(path)
+    if not path.is_file():
+        return False
+    suffix = path.suffix.lower()
+    if suffix in RAW_DATABASE_SUFFIXES:
+        return False
+    if suffix in SAFE_EXPORT_SUFFIXES:
+        return True
+    return path.name.lower().endswith(".sql.gz")
+
+
 @dataclass(frozen=True)
 class BackupSourceDefinition:
     source_id: str
@@ -68,6 +84,25 @@ class ProgramBackupScope:
         return not self.blockers and bool(self.paths)
 
 
+def _source_path_problem(source: BackupSourceDefinition, path: Path) -> str | None:
+    if path.is_symlink():
+        return f"Symlink als Sicherungsquelle gesperrt: {source.label} ({path})"
+    if source.kind in {SourceKind.FOLDER, SourceKind.DOCUMENTS}:
+        if not path.is_dir():
+            return f"Ordner erwartet: {source.label} ({path})"
+        return None
+    if source.kind in {SourceKind.LOCAL_EXPORT, SourceKind.DATABASE_EXPORT}:
+        if not is_safe_export_path(path):
+            return (
+                f"Unsicheres oder ungeeignetes Exportformat: {source.label} ({path}). "
+                "Rohdatenbanken .db/.sqlite werden nicht als Exportquelle akzeptiert."
+            )
+        return None
+    if source.kind == SourceKind.FILES and not path.is_file():
+        return f"Datei erwartet: {source.label} ({path})"
+    return None
+
+
 def resolve_program_scope(program: KCProgramDefinition) -> ProgramBackupScope:
     blockers: list[str] = []
     warnings: list[str] = []
@@ -87,6 +122,13 @@ def resolve_program_scope(program: KCProgramDefinition) -> ProgramBackupScope:
                 blockers.append(message)
             else:
                 warnings.append(message)
+            continue
+        problem = _source_path_problem(source, path)
+        if problem:
+            if source.requirement == SourceRequirement.REQUIRED:
+                blockers.append(problem)
+            else:
+                warnings.append(problem)
             continue
         paths.append(path)
 
