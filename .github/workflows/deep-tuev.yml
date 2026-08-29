@@ -78,7 +78,7 @@ jobs:
           updater = Path('auto_updater.py').read_text(encoding='utf-8')
           ui = Path('update_ui.py').read_text(encoding='utf-8')
           required_updater = ['sha256', '.part', 'releases/latest', 'Setup.exe', 'is_newer_version']
-          required_ui = ['Progressbar', '_backup_running', 'Später', 'Update installieren']
+          required_ui = ['Progressbar', '_backup_running', 'Später', 'Update herunterladen und installieren']
           missing = [x for x in required_updater if x not in updater] + [x for x in required_ui if x not in ui]
           if missing:
               raise SystemExit('Updater-TÜV fehlt: ' + ', '.join(missing))
