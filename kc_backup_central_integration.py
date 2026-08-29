@@ -18,6 +18,7 @@ class PersistentBackupSchedulerWindow(BackupSchedulerWindow):
 
     def __init__(self, master, *, store_path: str | Path, program_id: str = "pc-backup-vault", on_one_touch=None):
         self.store_path = Path(store_path)
+        store_existed = self.store_path.exists()
         try:
             jobs = load_jobs(self.store_path)
         except Exception as exc:
@@ -25,13 +26,20 @@ class PersistentBackupSchedulerWindow(BackupSchedulerWindow):
             messagebox.showwarning(
                 "Backup-Kalender",
                 f"Gespeicherte Scheduler-Jobs konnten nicht gelesen werden.\n\n{exc}\n\n"
-                "Es wird mit einer sicheren leeren/Standardansicht geöffnet; die beschädigte Datei wird nicht automatisch überschrieben.",
+                "Es wird mit einer sicheren leeren Ansicht geöffnet; die beschädigte Datei wird nicht automatisch überschrieben.",
                 parent=master,
             )
             self._store_read_failed = True
         else:
             self._store_read_failed = False
+        force_empty = bool(store_existed and not jobs)
         super().__init__(master, program_id=program_id, jobs=jobs, on_one_touch=on_one_touch)
+        # The base window offers starter jobs only on a genuinely new scheduler.
+        # An existing empty store means the user deliberately removed all jobs
+        # (or the store is unreadable) and must stay empty after reopening.
+        if force_empty:
+            self.model.jobs = []
+            self.refresh()
 
     def _persist(self):
         if getattr(self, "_store_read_failed", False):
