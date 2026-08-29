@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/project-finder-safe-cleanup
+      - feature/project-finder-productive-inventory
     paths:
       - 'project_finder/**'
       - 'tests/test_project_finder_cloud_contract.py'
