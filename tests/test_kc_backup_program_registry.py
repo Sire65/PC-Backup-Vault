@@ -14,11 +14,12 @@ from kc_backup_program_registry import (
 
 
 class KCProgramRegistryTests(unittest.TestCase):
-    def test_default_registry_contains_kc_programs(self):
+    def test_default_registry_contains_managed_programs(self):
         registry = default_registry()
         self.assertEqual(
             {p.program_id for p in registry.all()},
             {
+                "pc-backup-vault",
                 "kc-dp2",
                 "kc-verwaltung",
                 "kc-marktkasse",
@@ -40,6 +41,12 @@ class KCProgramRegistryTests(unittest.TestCase):
         registry = default_registry()
         for program in registry.all():
             self.assertTrue(program.required_sources(), program.program_id)
+
+    def test_pc_backup_vault_has_no_guessed_source(self):
+        program = default_registry().get("pc-backup-vault")
+        self.assertFalse(program.ready)
+        self.assertTrue(any(s.source_id == "program" for s in program.required_sources()))
+        self.assertEqual(program.configured_sources(), ())
 
     def test_missing_required_source_blocks_scope(self):
         program = KCProgramDefinition(
