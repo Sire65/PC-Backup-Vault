@@ -32,6 +32,24 @@ class KCBackupSourceDiscoveryTests(unittest.TestCase):
         }
         self.assertEqual(before, after)
 
+    def test_pc_backup_vault_folder_is_discoverable(self):
+        registry = default_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "PC-Backup-Vault"
+            vault.mkdir()
+            found = discover_candidates(root, registry.all(), max_depth=1)
+            self.assertTrue(any(c.program_id == "pc-backup-vault" and c.source_id == "program" and c.path == vault for c in found))
+
+    def test_raw_database_files_are_never_suggested_as_exports(self):
+        registry = default_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_db = root / "KC-DP2-Daten-Export.sqlite"
+            raw_db.write_bytes(b"not-a-safe-export")
+            found = discover_candidates(root, registry.all(), max_depth=1)
+            self.assertFalse(any(c.path == raw_db for c in found))
+
     def test_low_confidence_unrelated_paths_are_ignored(self):
         registry = default_registry()
         with tempfile.TemporaryDirectory() as tmp:
