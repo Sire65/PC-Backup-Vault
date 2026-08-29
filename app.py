@@ -6,11 +6,13 @@ from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from kc_backup_central_integration import enable_backup_central
+from kc_backup_scheduler_observability import enable_scheduler_observability
 
 
 enable_project_finder(App)
 enable_auto_update(App)
 enable_backup_central(App)
+enable_scheduler_observability(App)
 
 
 def _show_already_running():
