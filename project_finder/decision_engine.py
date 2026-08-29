@@ -24,7 +24,8 @@ PROJECT_MARKERS = {
 
 
 def _parts_lower(path: str) -> list[str]:
-    return [p.lower() for p in Path(path).parts]
+    normalized = str(path).replace('\\', '/')
+    return [part.lower() for part in normalized.split('/') if part]
 
 
 def _is_secret(item: ScanItem) -> bool:
