@@ -1,2 +1,0 @@
-Project Finder preview build trigger.
-No runtime code; safe to remove after preview packaging is established.
