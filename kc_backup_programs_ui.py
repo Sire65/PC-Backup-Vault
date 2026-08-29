@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 from kc_backup_program_registry import KCProgramDefinition, KCProgramRegistry, SourceKind, resolve_program_scope
 from kc_backup_program_status import ProgramRuntimeStatus, next_job_for_program, traffic_light
 from kc_backup_program_store import save_program_registry
+from kc_backup_source_adoption import validate_source_path
 
 
 class KCProgramsWindow(tk.Toplevel):
@@ -150,9 +151,26 @@ class KCProgramsWindow(tk.Toplevel):
         source = next(s for s in program.sources if s.source_id == source_id)
         if source.kind in {SourceKind.FOLDER, SourceKind.DOCUMENTS}:
             chosen = filedialog.askdirectory(title=f"Quelle wählen – {source.label}", parent=self)
+        elif source.kind in {SourceKind.LOCAL_EXPORT, SourceKind.DATABASE_EXPORT}:
+            chosen = filedialog.askopenfilename(
+                title=f"Exportdatei wählen – {source.label}",
+                parent=self,
+                filetypes=[
+                    ("Sichere Exportdateien", "*.json *.csv *.xlsx *.xls *.zip *.sql *.gz *.dump"),
+                    ("Alle Dateien", "*.*"),
+                ],
+            )
         else:
-            chosen = filedialog.askopenfilename(title=f"Exportdatei wählen – {source.label}", parent=self)
+            chosen = filedialog.askopenfilename(title=f"Datei wählen – {source.label}", parent=self)
         if not chosen: return
+        ok, reason = validate_source_path(source, chosen)
+        if not ok:
+            messagebox.showwarning(
+                "KC Programme – Quelle blockiert",
+                reason + "\n\nEs wurde nichts gespeichert.",
+                parent=self,
+            )
+            return
         sources = tuple(replace(s, configured_path=chosen) if s.source_id == source_id else s for s in program.sources)
         try: self._replace_program(replace(program, sources=sources))
         except Exception as exc: messagebox.showerror("KC Programme", f"Quelle konnte nicht gespeichert werden:\n{exc}", parent=self)
