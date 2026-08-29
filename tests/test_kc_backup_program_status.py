@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import date, datetime, time
 from pathlib import Path
+from unittest.mock import patch
 
 from kc_backup_program_status import (
     ProgramRuntimeStatus,
@@ -45,6 +46,41 @@ class KCProgramStatusTests(unittest.TestCase):
             self.assertEqual(after.last_job_id, "job-1")
             self.assertEqual(after.verify_status, "FAIL")
             self.assertEqual(after.last_error, "Hashfehler")
+
+    def test_success_status_write_failure_does_not_raise_or_downgrade_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            with patch("kc_backup_program_status.save_program_statuses", side_effect=OSError("disk full")):
+                status = record_program_success(
+                    path,
+                    program_id="kc-dp2",
+                    job_id="job-verified",
+                    verify_status="PASS",
+                    at=datetime(2026, 8, 29, 20, 0),
+                )
+            self.assertEqual(status.last_job_id, "job-verified")
+            self.assertEqual(status.verify_status, "PASS")
+            warning = Path(tmp) / "KC_BACKUP_PROGRAM_STATUS_WARNINGS.log"
+            self.assertTrue(warning.exists())
+            self.assertIn("BACKUP_SUCCESS_STATUS", warning.read_text(encoding="utf-8"))
+            self.assertIn("disk full", warning.read_text(encoding="utf-8"))
+
+    def test_verify_pass_status_write_failure_does_not_turn_verify_into_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            with patch("kc_backup_program_status.save_program_statuses", side_effect=PermissionError("read only")):
+                status = record_program_verify(path, program_id="kc-dp2", verify_status="PASS")
+            self.assertEqual(status.verify_status, "PASS")
+            self.assertIsNone(status.last_error)
+            warning = Path(tmp) / "KC_BACKUP_PROGRAM_STATUS_WARNINGS.log"
+            self.assertIn("VERIFY_PASS_STATUS", warning.read_text(encoding="utf-8"))
+
+    def test_verify_fail_status_persistence_remains_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            with patch("kc_backup_program_status.save_program_statuses", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    record_program_verify(path, program_id="kc-dp2", verify_status="FAIL", error="Hashfehler")
 
     def test_next_job_uses_program_id_and_skips_disabled(self):
         jobs = [
