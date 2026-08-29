@@ -17,6 +17,7 @@ class SourceCandidate:
 
 
 _PROGRAM_HINTS = {
+    "pc-backup-vault": ("pc backup vault", "backup vault", "pc_backup_vault"),
     "kc-dp2": ("dp2", "dienstplan", "kc dp"),
     "kc-verwaltung": ("verwaltung", "kc verwaltung"),
     "kc-marktkasse": ("marktkasse", "kasse", "bilderkasse"),
@@ -25,12 +26,25 @@ _PROGRAM_HINTS = {
     "kc-inventar": ("inventar", "inventur"),
     "kc-bilderrechner": ("bilderrechner", "bilder rechner"),
 }
-_EXPORT_SUFFIXES = {".json", ".csv", ".xlsx", ".xls", ".zip", ".db", ".sqlite", ".sqlite3"}
+_SAFE_EXPORT_SUFFIXES = {".json", ".csv", ".xlsx", ".xls", ".zip", ".sql", ".dump"}
+_RAW_DATABASE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
 
 
 def _normal(text: str) -> str:
     return text.lower().replace("_", " ").replace("-", " ")
+
+
+def is_safe_export_candidate(path: Path) -> bool:
+    """Return True only for explicit export/container formats, never raw live DB files."""
+    if not path.is_file():
+        return False
+    suffix = path.suffix.lower()
+    if suffix in _RAW_DATABASE_SUFFIXES:
+        return False
+    if suffix in _SAFE_EXPORT_SUFFIXES:
+        return True
+    return path.name.lower().endswith(".sql.gz")
 
 
 def _score_path(program: KCProgramDefinition, source, path: Path) -> tuple[int, str] | None:
@@ -58,7 +72,7 @@ def _score_path(program: KCProgramDefinition, source, path: Path) -> tuple[int, 
             return None
         score += 5
     else:
-        if not path.is_file() or path.suffix.lower() not in _EXPORT_SUFFIXES:
+        if not is_safe_export_candidate(path):
             return None
         score += 10
         if any(token in name for token in ("export", "backup", "dump", "daten", "data")):
@@ -80,8 +94,8 @@ def discover_candidates(
 ) -> list[SourceCandidate]:
     """Read-only, bounded source discovery below an explicitly selected root.
 
-    The function never writes, follows no symlinks, and never changes program
-    configuration. Results are suggestions only.
+    The function never writes, follows no symlinks, never changes program
+    configuration and never proposes raw .db/.sqlite files as exports.
     """
     base = Path(root).expanduser()
     if not base.exists() or not base.is_dir():
