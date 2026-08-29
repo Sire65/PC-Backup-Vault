@@ -1,5 +1,5 @@
 #define MyAppName "PC Backup Vault"
-#define MyAppVersion "1.7.3"
+#define MyAppVersion "1.8.0"
 #define MyAppPublisher "KC"
 #define MyAppExeName "PC_Backup_Vault.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={autopf}\PC Backup Vault
 DefaultGroupName=PC Backup Vault
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=PC_Backup_Vault_1.7.3_Setup
+OutputBaseFilename=PC_Backup_Vault_1.8.0_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -23,6 +23,8 @@ UsePreviousAppDir=yes
 UninstallDisplayName=PC Backup Vault
 UninstallDisplayIcon={app}\PC_Backup_Vault.exe
 SetupLogging=yes
+CloseApplications=yes
+RestartApplications=yes
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
