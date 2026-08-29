@@ -3,6 +3,7 @@ from __future__ import annotations
 from tkinter import BOTH, X, messagebox, ttk
 
 from .development_dashboard import DevelopmentDashboard
+from .inventory_github_dashboard import InventoryGitHubDashboard
 from .recovery_branch import create_recovery_branches, validate_recovery_preview
 from .ui_changes import ChangesSinceLastTab
 from .ui_git_status import GitStatusTab
@@ -37,12 +38,18 @@ class ProjectInventoryWorkspace(ttk.Frame):
             get_scan_items=lambda: self.finder.items,
             get_development_summary=get_development_summary,
         )
+        self.inventory_github_dashboard = InventoryGitHubDashboard(
+            self.notebook,
+            get_scan_items=lambda: self.finder.items,
+            get_github_report=lambda: self.finder.github_report,
+        )
         self.changes = ChangesSinceLastTab(self.notebook)
         self.git_status = GitStatusTab(self.notebook, get_rows=get_git_rows)
         self.source_candidates = SourceCandidatesTab(self.notebook, get_scan_items=lambda: self.finder.items)
         self.job_history = JobHistoryTab(self.notebook, output_root=job_output_root)
 
         self.notebook.add(self.dashboard, text="Übersicht")
+        self.notebook.add(self.inventory_github_dashboard, text="Inventur / GitHub Dashboard")
         self.notebook.add(self.finder, text="Festplatten-Analyse")
         self.notebook.add(self.source_candidates, text="Quellstand-Kandidaten")
         self.notebook.add(self.changes, text="Neu seit letzter Analyse")
@@ -138,7 +145,9 @@ class ProjectInventoryWorkspace(ttk.Frame):
 
     def _on_tab_changed(self, _event=None):
         current = self.notebook.nametowidget(self.notebook.select())
-        if current is self.git_status:
+        if current is self.inventory_github_dashboard:
+            self.inventory_github_dashboard.refresh()
+        elif current is self.git_status:
             self.git_status.refresh()
         elif current is self.source_candidates:
             self.source_candidates.refresh()
