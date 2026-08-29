@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import date, time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -16,6 +16,12 @@ from kc_backup_scheduler import (
 
 
 STORE_VERSION = 1
+
+
+@dataclass(frozen=True)
+class JobLoadResult:
+    jobs: tuple[BackupScheduleJob, ...]
+    warnings: tuple[str, ...] = ()
 
 
 def _profile_to_dict(profile: BackupSafetyProfile) -> dict:
@@ -65,6 +71,8 @@ def _profile_from_dict(raw: dict) -> BackupSafetyProfile:
 
 
 def _job_from_dict(raw: dict) -> BackupScheduleJob:
+    if not isinstance(raw, dict):
+        raise ValueError("Scheduler-Job ist kein Objekt")
     job_id = str(raw.get("job_id") or "").strip() or str(uuid4())
     return BackupScheduleJob(
         program_id=str(raw["program_id"]),
@@ -81,11 +89,41 @@ def _job_from_dict(raw: dict) -> BackupScheduleJob:
     )
 
 
-def load_jobs(path: str | Path) -> list[BackupScheduleJob]:
+def _load_raw(path: str | Path) -> dict:
     source = Path(path)
     if not source.exists():
-        return []
+        return {"store_version": STORE_VERSION, "jobs": []}
     raw = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Scheduler-Datei hat kein gültiges Objektformat")
     if int(raw.get("store_version", 0)) != STORE_VERSION:
         raise ValueError("Unbekannte Scheduler-Speicherversion")
-    return [_job_from_dict(item) for item in raw.get("jobs", [])]
+    jobs = raw.get("jobs", [])
+    if not isinstance(jobs, list):
+        raise ValueError("Scheduler-Datei enthält keine gültige Jobliste")
+    return raw
+
+
+def load_jobs_resilient(path: str | Path) -> JobLoadResult:
+    """Load valid jobs while quarantining malformed sibling entries in memory only.
+
+    The source file is never rewritten here. Unknown store versions and malformed
+    top-level structures remain hard failures.
+    """
+    raw = _load_raw(path)
+    jobs: list[BackupScheduleJob] = []
+    warnings: list[str] = []
+    for index, item in enumerate(raw.get("jobs", []), start=1):
+        try:
+            jobs.append(_job_from_dict(item))
+        except Exception as exc:
+            warnings.append(f"Job #{index} übersprungen: {exc}")
+    return JobLoadResult(tuple(jobs), tuple(warnings))
+
+
+def load_jobs(path: str | Path) -> list[BackupScheduleJob]:
+    """Strict editor load: any malformed entry blocks mutation of the source file."""
+    result = load_jobs_resilient(path)
+    if result.warnings:
+        raise ValueError("; ".join(result.warnings))
+    return list(result.jobs)
