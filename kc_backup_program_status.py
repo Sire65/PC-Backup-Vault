@@ -93,6 +93,28 @@ def record_program_success(
     return status
 
 
+def record_program_verify(
+    path: str | Path,
+    *,
+    program_id: str,
+    verify_status: str,
+    error: str | None = None,
+) -> ProgramRuntimeStatus:
+    """Update verification state without falsifying the last backup timestamp."""
+    statuses = load_program_statuses(path)
+    previous = statuses.get(program_id, ProgramRuntimeStatus(program_id=program_id))
+    status = ProgramRuntimeStatus(
+        program_id=program_id,
+        last_backup_at=previous.last_backup_at,
+        last_job_id=previous.last_job_id,
+        verify_status=str(verify_status or "").upper() or None,
+        last_error=str(error) if error else None,
+    )
+    statuses[program_id] = status
+    save_program_statuses(path, statuses)
+    return status
+
+
 def record_program_failure(path: str | Path, *, program_id: str, error: str) -> ProgramRuntimeStatus:
     statuses = load_program_statuses(path)
     previous = statuses.get(program_id, ProgramRuntimeStatus(program_id=program_id))
