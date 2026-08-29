@@ -23,6 +23,15 @@ def append_job(job: dict, path: str | Path | None = None) -> dict:
     row.setdefault("schema", "pc-backup-vault.project-finder-job.v1")
     with target.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+    # Core/Neon is an optional control plane. Local append-only history remains authoritative
+    # and inventory must never wait for or fail because of the network/database.
+    if path is None:
+        try:
+            from .core_job_bridge import mirror_job_best_effort
+            mirror_job_best_effort(row)
+        except Exception:
+            pass
     return row
 
 
