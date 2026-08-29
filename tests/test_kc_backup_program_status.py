@@ -9,6 +9,7 @@ from kc_backup_program_status import (
     next_job_for_program,
     record_program_failure,
     record_program_success,
+    record_program_verify,
     traffic_light,
 )
 from kc_backup_scheduler import BackupScheduleJob, ScheduleFrequency
@@ -31,6 +32,19 @@ class KCProgramStatusTests(unittest.TestCase):
             self.assertEqual(failed.last_backup_at, first.last_backup_at)
             self.assertEqual(failed.verify_status, "PASS")
             self.assertEqual(failed.last_error, "Netzwerkfehler")
+
+    def test_verify_update_does_not_change_last_backup_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            stamp = datetime(2026, 8, 29, 12, 30)
+            record_program_success(path, program_id="kc-dp2", job_id="job-1", verify_status="PASS", at=stamp)
+            before = load_program_statuses(path)["kc-dp2"]
+            record_program_verify(path, program_id="kc-dp2", verify_status="FAIL", error="Hashfehler")
+            after = load_program_statuses(path)["kc-dp2"]
+            self.assertEqual(after.last_backup_at, before.last_backup_at)
+            self.assertEqual(after.last_job_id, "job-1")
+            self.assertEqual(after.verify_status, "FAIL")
+            self.assertEqual(after.last_error, "Hashfehler")
 
     def test_next_job_uses_program_id_and_skips_disabled(self):
         jobs = [
