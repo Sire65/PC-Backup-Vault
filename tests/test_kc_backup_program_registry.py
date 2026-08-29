@@ -14,11 +14,19 @@ from kc_backup_program_registry import (
 
 
 class KCProgramRegistryTests(unittest.TestCase):
-    def test_default_registry_contains_initial_three_programs(self):
+    def test_default_registry_contains_kc_programs(self):
         registry = default_registry()
         self.assertEqual(
             {p.program_id for p in registry.all()},
-            {"kc-dp2", "kc-verwaltung", "kc-marktkasse"},
+            {
+                "kc-dp2",
+                "kc-verwaltung",
+                "kc-marktkasse",
+                "kc-futura",
+                "kc-tv-editor",
+                "kc-inventar",
+                "kc-bilderrechner",
+            },
         )
 
     def test_templates_are_not_ready_until_real_sources_are_configured(self):
@@ -26,6 +34,12 @@ class KCProgramRegistryTests(unittest.TestCase):
         for program in registry.all():
             self.assertFalse(program.ready)
             self.assertTrue(program.missing_required_sources())
+            self.assertEqual(program.configured_sources(), ())
+
+    def test_every_default_program_has_at_least_one_required_source(self):
+        registry = default_registry()
+        for program in registry.all():
+            self.assertTrue(program.required_sources(), program.program_id)
 
     def test_missing_required_source_blocks_scope(self):
         program = KCProgramDefinition(
