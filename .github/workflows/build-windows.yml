@@ -10,6 +10,7 @@ on:
       - "**.py"
       - "requirements.txt"
       - "schema.sql"
+      - "schema_core_jobs.sql"
       - "BUILD_EXE.bat"
       - "installer/**"
       - ".github/workflows/build-windows.yml"
@@ -41,7 +42,7 @@ jobs:
       - name: PC Backup Vault bauen
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
 
       - name: Portables Windows-Paket erstellen
         shell: pwsh
