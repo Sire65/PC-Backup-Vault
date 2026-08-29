@@ -1,0 +1,101 @@
+name: PC Backup Vault Tiefen-TÜV
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/project-finder-productive-inventory
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - 'schema.sql'
+      - 'installer/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  tuev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Gesamten Python-Stand kompilieren
+        run: python -m compileall -q .
+
+      - name: Alle Regressionstests ausführen
+        run: |
+          python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Version und Installer konsolidieren
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          from config_store import APP_VERSION
+          iss = Path('installer/PC_Backup_Vault.iss').read_text(encoding='utf-8')
+          wf = Path('.github/workflows/release-windows.yml').read_text(encoding='utf-8')
+          match = re.search(r'#define MyAppVersion "([^"]+)"', iss)
+          if not match or match.group(1) != APP_VERSION:
+              raise SystemExit('Installer- und Programmversion sind nicht identisch.')
+          if 'Setup.exe.sha256' not in wf or 'Regression' not in wf:
+              raise SystemExit('Release-Workflow enthält nicht alle Update-Sicherheitsgates.')
+          print('Version/Release-Pfad konsistent:', APP_VERSION)
+          PY
+
+      - name: Project-Finder-Isolation vom Backup-Kern prüfen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --name-only origin/main...HEAD -- backup_engine.py object_store.py dashboard_window.py kc_communication.py vault_db.py verification.py recovery_pass.py | grep -q .; then
+            echo 'Unerwartete Änderungen an geschützten Kernmodulen gegenüber main:'
+            git diff --name-only origin/main...HEAD -- backup_engine.py object_store.py dashboard_window.py kc_communication.py vault_db.py verification.py recovery_pass.py
+            exit 1
+          fi
+          echo 'Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule unverändert.'
+
+      - name: Update-Sicherheitsmerkmale prüfen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          updater = Path('auto_updater.py').read_text(encoding='utf-8')
+          ui = Path('update_ui.py').read_text(encoding='utf-8')
+          required_updater = ['sha256', '.part', 'releases/latest', 'Setup.exe', 'is_newer_version']
+          required_ui = ['Progressbar', '_backup_running', 'Später', 'Update installieren']
+          missing = [x for x in required_updater if x not in updater] + [x for x in required_ui if x not in ui]
+          if missing:
+              raise SystemExit('Updater-TÜV fehlt: ' + ', '.join(missing))
+          print('Updater-TÜV: Sicherheitsmerkmale vorhanden.')
+          PY
+
+      - name: TÜV-Zusammenfassung
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## PC Backup Vault Tiefen-TÜV'
+            echo ''
+            echo '- Gesamter Python-Stand kompiliert'
+            echo '- Project-Finder- und Root-Regression ausgeführt'
+            echo '- Programm-/Installer-Version abgeglichen'
+            echo '- Release-Workflow mit SHA-256 und Regression geprüft'
+            echo '- Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule gegen main isoliert'
+            echo '- Updater-Sicherheitsmerkmale geprüft'
+          } >> "$GITHUB_STEP_SUMMARY"
