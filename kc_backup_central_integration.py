@@ -4,11 +4,14 @@ import threading
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from backup_engine import backup_files, BackupCancelled, ChristmasGuard, LimitBlocked
+from backup_engine import backup_files, BackupCancelled, ChristmasGuard, LimitBlocked, collect_paths
 from config_store import APP_VERSION
 from interrupted_recovery import clear_checkpoint, save_manual_checkpoint, update_job_id
 from kc_backup_engine_adapter import execute_prepared_backup, prepare_one_touch_backup
 from kc_backup_job_store import load_jobs, save_jobs
+from kc_backup_program_registry import default_registry
+from kc_backup_program_store import load_program_registry
+from kc_backup_programs_ui import KCProgramsWindow
 from kc_backup_scheduler_ui import BackupSchedulerWindow
 from verification import verify_job
 
@@ -34,9 +37,6 @@ class PersistentBackupSchedulerWindow(BackupSchedulerWindow):
             self._store_read_failed = False
         force_empty = bool(store_existed and not jobs)
         super().__init__(master, program_id=program_id, jobs=jobs, on_one_touch=on_one_touch)
-        # The base window offers starter jobs only on a genuinely new scheduler.
-        # An existing empty store means the user deliberately removed all jobs
-        # (or the store is unreadable) and must stay empty after reopening.
         if force_empty:
             self.model.jobs = []
             self.refresh()
@@ -115,7 +115,37 @@ def enable_backup_central(App):
             on_one_touch=lambda _plan: self.run_default_one_touch(),
         )
 
-    def secure_one_touch(self):
+    def open_kc_programs(self):
+        path = self.store.path.parent / "KC_BACKUP_PROGRAMS.json"
+        try:
+            registry = load_program_registry(path, default_registry())
+        except Exception as exc:
+            messagebox.showerror(
+                "KC Programme",
+                f"Die gespeicherte Programmkonfiguration konnte nicht sicher gelesen werden.\n\n{exc}\n\n"
+                "Es wurde nichts verändert oder gestartet.",
+                parent=self,
+            )
+            return None
+
+        def start_program_backup(program, scope):
+            if getattr(self, "_backup_running", False):
+                messagebox.showwarning("KC Programme", "Es läuft bereits eine Sicherung.", parent=self)
+                return
+            self.selected = collect_paths([str(path) for path in scope.paths])
+            self._refresh_tree()
+            self.update_backup_recommendation()
+            self._update_backup_button_state()
+            self.run_default_one_touch(program_id=program.program_id)
+
+        return KCProgramsWindow(
+            self,
+            registry=registry,
+            store_path=path,
+            on_backup=start_program_backup,
+        )
+
+    def secure_one_touch(self, program_id="pc-backup-vault"):
         if getattr(self, "_backup_running", False):
             return
         if not self.selected:
@@ -138,7 +168,7 @@ def enable_backup_central(App):
         target_ready = bool(dsn) and effective != "B2_MISSING" and (effective != "B2" or bool(b2_cfg.get("configured")))
         recovery_ready = bool(key) and bool(self.store.data.get("recovery_key_exported"))
         prepared = prepare_one_touch_backup(
-            program_id="pc-backup-vault",
+            program_id=program_id,
             paths=self.selected,
             target_ready=target_ready,
             recovery_material_ready=recovery_ready,
@@ -158,7 +188,7 @@ def enable_backup_central(App):
         save_manual_checkpoint(key, paths, prepared.backup_mode, prepared.payload_target, None)
         self._reset_live_progress(len(paths), total_bytes)
         control = self._begin_backup_control()
-        self.lbl_progress.config(text="One-Touch: Probelauf OK – sichere Sicherung startet …")
+        self.lbl_progress.config(text=f"One-Touch {program_id}: Probelauf OK – sichere Sicherung startet …")
 
         def cb(done, total, message, metrics=None):
             self.after(0, lambda: self._progress(done, total, message, metrics))
@@ -195,7 +225,7 @@ def enable_backup_central(App):
                 clear_checkpoint()
                 if getattr(verification, "result", "") != "PASS":
                     raise RuntimeError("Vollsicherung erstellt, aber die verpflichtende FULL-Verifizierung war nicht PASS. Bitte Report prüfen.")
-                self.after(0, lambda: self.lbl_progress.config(text="One-Touch abgeschlossen: Sicherung + FULL-Verify erfolgreich."))
+                self.after(0, lambda: self.lbl_progress.config(text=f"One-Touch {program_id} abgeschlossen: Sicherung + FULL-Verify erfolgreich."))
                 try:
                     from ui import JobReportWindow
                     self.after(0, lambda j=job_id: JobReportWindow(self, j))
@@ -204,9 +234,9 @@ def enable_backup_central(App):
                 self.notify_kc(
                     "backup_success",
                     "One-Touch Backup erfolgreich",
-                    f"Backup-Job {job_id} wurde vollständig gesichert und verifiziert.",
+                    f"{program_id}: Backup-Job {job_id} wurde vollständig gesichert und verifiziert.",
                     "INFO",
-                    {"job_id": str(job_id or ""), "verify": "FULL"},
+                    {"job_id": str(job_id or ""), "program_id": program_id, "verify": "FULL"},
                 )
                 self.after(0, self.refresh_status)
                 self.after(0, self.refresh_system_status)
@@ -221,7 +251,7 @@ def enable_backup_central(App):
             except Exception as exc:
                 clear_checkpoint()
                 msg = str(exc)
-                self.notify_kc("backup_failed", "One-Touch Backup fehlgeschlagen", msg, "ERROR")
+                self.notify_kc("backup_failed", "One-Touch Backup fehlgeschlagen", msg, "ERROR", {"program_id": program_id})
                 self.after(0, lambda m=msg: messagebox.showerror("One-Touch", f"One-Touch fehlgeschlagen:\n{m}", parent=self))
             finally:
                 self.after(0, lambda: self._set_backup_running(False))
@@ -232,11 +262,15 @@ def enable_backup_central(App):
         original_build(self)
         status_button = _find_button_by_text(self, "↻ Status")
         if status_button is not None:
-            button = ttk.Button(status_button.master, text="🗓 Backup-Kalender", command=self.open_backup_calendar)
-            button.pack(side="right", padx=(0, 8))
-            self.btn_backup_calendar = button
+            program_button = ttk.Button(status_button.master, text="KC Programme", command=self.open_kc_programs)
+            program_button.pack(side="right", padx=(0, 8))
+            self.btn_kc_programs = program_button
+            calendar_button = ttk.Button(status_button.master, text="🗓 Backup-Kalender", command=self.open_backup_calendar)
+            calendar_button.pack(side="right", padx=(0, 8))
+            self.btn_backup_calendar = calendar_button
 
     App.open_backup_calendar = open_backup_calendar
+    App.open_kc_programs = open_kc_programs
     App.run_default_one_touch = secure_one_touch
     App._build = build_with_backup_central
     App._kc_backup_central_enabled = True
