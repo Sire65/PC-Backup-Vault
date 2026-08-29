@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable
@@ -112,3 +114,21 @@ def inventory_summary(items: Iterable[ScanItem]) -> dict:
             counts['quarantine_candidates'] += 1
             sizes['quarantine_candidates'] += int(row.get('size') or 0)
     return {'counts': counts, 'sizes': sizes, 'rows': rows}
+
+
+def export_inventory_json(items: Iterable[ScanItem], target: str) -> str:
+    payload = inventory_summary(items)
+    path = Path(target)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    return str(path)
+
+
+def export_inventory_csv(items: Iterable[ScanItem], target: str) -> str:
+    rows = classify_inventory(items)
+    path = Path(target)
+    with path.open('w', newline='', encoding='utf-8-sig') as f:
+        if rows:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+    return str(path)
