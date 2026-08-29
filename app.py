@@ -7,12 +7,14 @@ from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from kc_backup_central_integration import enable_backup_central
 from kc_backup_scheduler_observability import enable_scheduler_observability
+from kc_backup_source_discovery_integration import enable_source_discovery
 
 
 enable_project_finder(App)
 enable_auto_update(App)
 enable_backup_central(App)
 enable_scheduler_observability(App)
+enable_source_discovery(App)
 
 
 def _show_already_running():
