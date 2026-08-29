@@ -8,6 +8,7 @@ on:
     paths:
       - 'config_store.py'
       - 'installer/PC_Backup_Vault.iss'
+      - 'schema_core_jobs.sql'
       - '.github/workflows/release-windows.yml'
 
 permissions:
@@ -78,7 +79,7 @@ jobs:
         if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
 
       - name: Inno Setup installieren
         if: steps.existing.outputs.exists != 'true'
