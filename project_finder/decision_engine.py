@@ -33,6 +33,14 @@ def _parts_lower(path: str) -> list[str]:
     return [part.lower() for part in normalized.split('/') if part]
 
 
+def _project_scoped_parts(path: str) -> list[str]:
+    parts = _parts_lower(path)
+    project_indexes = [i for i, part in enumerate(parts) if part in KNOWN_PROJECT_DIRS]
+    if project_indexes:
+        return parts[project_indexes[-1]:]
+    return parts
+
+
 def _is_secret(item: ScanItem) -> bool:
     name = item.name.lower()
     if name in SECRET_NAMES:
@@ -41,7 +49,7 @@ def _is_secret(item: ScanItem) -> bool:
 
 
 def _is_temp_path(item: ScanItem) -> bool:
-    return any(part in TEMP_DIRS for part in _parts_lower(item.path))
+    return any(part in TEMP_DIRS for part in _project_scoped_parts(item.path))
 
 
 def _looks_project_material(item: ScanItem) -> bool:
@@ -77,7 +85,7 @@ def classify_item(item: ScanItem) -> dict:
 
     if _is_temp_path(item):
         return {**base, 'inventory_action': 'REVIEW', 'git_action': 'NO',
-                'confidence': 80, 'decision_reason': 'Datei liegt in Build-/Cache-/Temp-Bereich'}
+                'confidence': 80, 'decision_reason': 'Datei liegt in Build-/Cache-/Temp-Bereich des Projekts'}
 
     ext = item.extension.lower()
     project_material = _looks_project_material(item)
