@@ -3,6 +3,10 @@ from instance_lock import InstanceLock
 from ui import App
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
+from project_finder.main_integration import enable_project_finder
+
+
+enable_project_finder(App)
 
 
 def _show_already_running():
