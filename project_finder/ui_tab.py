@@ -8,6 +8,7 @@ from tkinter import BOTH, END, LEFT, RIGHT, X, BooleanVar, DoubleVar, StringVar,
 from .decision_engine import classify_inventory, export_inventory_csv, export_inventory_json, inventory_summary
 from .git_handoff import create_git_handoff
 from .github_compare import compare_inventory, export_compare_report
+from .recovery_preview import build_recovery_preview, export_recovery_preview
 from .scanner import cleanup_candidates, count_scan_files, quarantine, scan
 
 
@@ -20,6 +21,7 @@ class ProjectFinderTab(ttk.Frame):
         self.items = []
         self.github_report: dict | None = None
         self.github_by_path: dict[str, dict] = {}
+        self.recovery_preview: dict | None = None
         self.stop_flag = False
         self.scan_total = 0
         self.scan_started = 0.0
@@ -85,6 +87,7 @@ class ProjectFinderTab(ttk.Frame):
         ttk.Button(actions, text='Inventur CSV', command=lambda: self.export('csv')).pack(side=LEFT, padx=(0, 6))
         ttk.Button(actions, text='Git-Übergabepaket erstellen…', command=self.create_git_package).pack(side=LEFT, padx=(0, 6))
         ttk.Button(actions, text='Mit GitHub vergleichen (read-only)…', command=self.start_github_compare).pack(side=LEFT, padx=(0, 6))
+        ttk.Button(actions, text='Recovery-Branch Vorschau…', command=self.create_recovery_preview).pack(side=LEFT, padx=(0, 6))
         ttk.Button(actions, text='Vergleichsbericht JSON…', command=self.export_github_report).pack(side=LEFT, padx=(0, 16))
         ttk.Button(actions, text='Sichere Dubletten in Quarantäne…', command=self.quarantine_selected).pack(side=RIGHT)
 
@@ -138,6 +141,7 @@ class ProjectFinderTab(ttk.Frame):
         self.items = []
         self.github_report = None
         self.github_by_path = {}
+        self.recovery_preview = None
         self.tree.delete(*self.tree.get_children())
         self.scan_total = 0
         self.scan_started = 0.0
@@ -263,6 +267,7 @@ class ProjectFinderTab(ttk.Frame):
         if not self.items:
             messagebox.showinfo('GitHub-Vergleich', 'Bitte zuerst eine Inventur durchführen.')
             return
+        self.recovery_preview = None
         self.status_var.set('GitHub-Vergleich läuft · ausschließlich Lesen · keine Änderung an GitHub…')
         threading.Thread(target=self._github_compare_worker, daemon=True).start()
 
@@ -294,6 +299,31 @@ class ProjectFinderTab(ttk.Frame):
             f'Identisch: {identical:,}\nNur lokal: {local_only:,}\nAbweichend: {divergent:,}\n'
             f'Wahrscheinlich identisch: {possible:,}\nRepo nicht erreichbar: {unavailable:,}\nNicht zugeordnet: {unassigned:,}\n\n'
             'Es wurde ausschließlich gelesen. Keine Datei wurde zu GitHub geschrieben, überschrieben oder gelöscht.',
+        )
+
+    def create_recovery_preview(self):
+        if not self.github_report:
+            messagebox.showinfo('Recovery-Branch Vorschau', 'Bitte zuerst den read-only GitHub-Vergleich durchführen.')
+            return
+        preview = build_recovery_preview(self.items, self.github_report)
+        self.recovery_preview = preview
+        candidates = preview.get('candidate_count', 0)
+        blocked = preview.get('blocked_count', 0)
+        groups = preview.get('groups', [])
+        repo_count = len(groups)
+        self.status_var.set(f'Recovery-Vorschau · {candidates:,} Kandidaten · {blocked:,} blockiert · {repo_count:,} Repository(s) · keine GitHub-Änderung')
+        stamp = time.strftime('%Y%m%d-%H%M%S')
+        p = filedialog.asksaveasfilename(
+            title='Recovery-Branch Vorschau speichern', defaultextension='.json',
+            initialfile=f'Recovery-Branch-Vorschau_{stamp}.json', filetypes=[('JSON', '*.json')],
+        )
+        if p:
+            export_recovery_preview(preview, p)
+        branches = '\n'.join(f"{g['repo']}: {g['proposed_branch']} ({g['file_count']} Datei(en))" for g in groups[:8]) or 'Keine freigegebenen Recovery-Kandidaten.'
+        messagebox.showinfo(
+            'Recovery-Branch Vorschau · read-only',
+            f'Freigegebene Kandidaten: {candidates:,}\nBlockiert: {blocked:,}\nRepositories: {repo_count:,}\n\n{branches}\n\n'
+            'Es wurde KEIN Branch erstellt und NICHTS nach GitHub geschrieben. main blieb unverändert.',
         )
 
     def export_github_report(self):
