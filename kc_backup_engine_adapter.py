@@ -108,11 +108,14 @@ def execute_prepared_backup(
     object_store_config: dict | None = None,
     progress=None,
     control=None,
+    recovery_hook=None,
 ) -> object:
     """Invoke the existing engine only for an already allowed prepared BACKUP.
 
     Engine injection keeps this module testable and avoids importing or
     modifying backup_engine internals. No restore operation can pass here.
+    Recovery callbacks are passed through unchanged so the existing interruption
+    protection remains active when Backup Central starts the engine.
     """
     if not prepared.allowed:
         raise RuntimeError("Backup ist durch den KC-Probelauf blockiert: " + "; ".join(prepared.blockers))
@@ -132,4 +135,5 @@ def execute_prepared_backup(
         payload_target=prepared.payload_target,
         object_store_config=object_store_config,
         control=control,
+        recovery_hook=recovery_hook,
     )
