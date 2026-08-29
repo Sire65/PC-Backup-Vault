@@ -31,6 +31,7 @@ PROJECT_WORDS = (
 VERSION_RE = re.compile(r'(?<!\d)(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[-_.][a-z0-9]+)?)', re.I)
 COPY_WORDS = ('copy', 'kopie', 'alt', 'old', 'backup', 'bak', 'temp', 'tmp', 'test', 'neu', 'new', 'final')
 TEMP_PARTS = {'tmp', 'temp', 'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
+STRONG_TEMP_PARTS = {'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
 SYSTEM_DIRS = {'$RECYCLE.BIN', 'System Volume Information'}
 
 
@@ -96,13 +97,20 @@ def _normalized_parts(path: str) -> list[str]:
     return [p.lower() for p in str(path).replace('\\', '/').split('/') if p]
 
 
-def _canonical_rank(item: ScanItem) -> tuple[int, int, int, str]:
-    """Lower is better. Prefer non-temp, project-looking, newer, stable-looking paths."""
+def _canonical_rank(item: ScanItem) -> tuple[int, int, int, int, str]:
+    """Lower is better; strongly prefer real source/assets over build/cache copies.
+
+    Generic OS-level temp roots (for example /tmp on CI) are intentionally not a
+    strong penalty. Only build/cache/venv-style project subtrees are strong temp
+    evidence. A temp/tmp directory immediately above the file remains a weak
+    penalty so real project folders named tmp are still treated conservatively.
+    """
     parts = _normalized_parts(item.path)
-    temp_penalty = 1 if any(p in TEMP_PARTS for p in parts) else 0
+    parent = parts[-2] if len(parts) >= 2 else ''
+    strong_temp_penalty = 1 if any(p in STRONG_TEMP_PARTS for p in parts) else 0
+    weak_temp_penalty = 1 if parent in {'tmp', 'temp'} else 0
     copy_penalty = 1 if any(w in item.name.lower() for w in COPY_WORDS) else 0
-    project_bonus = -1 if item.score >= 45 else 0
-    return (temp_penalty, copy_penalty, project_bonus, item.path.lower())
+    return (strong_temp_penalty, weak_temp_penalty, copy_penalty, -int(item.score), item.path.lower())
 
 
 def _assign_duplicate_groups(items: list[ScanItem]) -> None:
@@ -113,7 +121,7 @@ def _assign_duplicate_groups(items: list[ScanItem]) -> None:
     for group in groups.values():
         if len(group) < 2:
             continue
-        canonical = sorted(group, key=_canonical_rank)[0]
+        canonical = min(group, key=_canonical_rank)
         for item in group:
             if item is canonical:
                 item.duplicate_of = ''
