@@ -9,24 +9,26 @@ on:
       - 'project_finder/**'
       - 'app.py'
       - 'ui.py'
+      - 'backup_engine.py'
+      - 'object_store.py'
       - 'auto_updater.py'
       - 'update_ui.py'
       - 'config_store.py'
       - 'installer/**'
-      - 'tests/test_project_finder_cloud_contract.py'
-      - 'tests/test_auto_updater.py'
+      - 'tests/**'
       - '.github/workflows/project-finder-tests.yml'
   pull_request:
     paths:
       - 'project_finder/**'
       - 'app.py'
       - 'ui.py'
+      - 'backup_engine.py'
+      - 'object_store.py'
       - 'auto_updater.py'
       - 'update_ui.py'
       - 'config_store.py'
       - 'installer/**'
-      - 'tests/test_project_finder_cloud_contract.py'
-      - 'tests/test_auto_updater.py'
+      - 'tests/**'
       - '.github/workflows/project-finder-tests.yml'
   workflow_dispatch:
 
@@ -36,7 +38,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,16 +46,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Compile integrated entrypoint, updater and Project Finder
-        run: python -m compileall -q app.py auto_updater.py update_ui.py project_finder
+          cache: pip
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile full Python source tree
+        run: |
+          python -m compileall -q .
       - name: Run Project Finder unit tests
         run: python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
-      - name: Run cloud contract regression
+      - name: Run complete root regression suite
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify version consistency
+        shell: bash
         run: |
-          if [ -f tests/test_project_finder_cloud_contract.py ]; then
-            python -m unittest discover -s tests -p 'test_project_finder_cloud_contract.py' -v
-          else
-            echo 'Cloud contract regression file not present; skipped.'
-          fi
-      - name: Run automatic updater regression
-        run: python -m unittest discover -s tests -p 'test_auto_updater.py' -v
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          from config_store import APP_VERSION
+          iss = Path('installer/PC_Backup_Vault.iss').read_text(encoding='utf-8')
+          match = re.search(r'#define MyAppVersion "([^"]+)"', iss)
+          if not match or match.group(1) != APP_VERSION:
+              raise SystemExit(f'Versionskonflikt: config={APP_VERSION!r}, installer={match.group(1) if match else None!r}')
+          print('Version konsistent:', APP_VERSION)
+          PY
