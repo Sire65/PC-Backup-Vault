@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,8 @@ from kc_backup_scheduler import BackupScheduleJob
 
 
 STORE_VERSION = 1
+_LOG = logging.getLogger(__name__)
+_WARNING_LOG = "KC_BACKUP_PROGRAM_STATUS_WARNINGS.log"
 
 
 @dataclass(frozen=True)
@@ -71,15 +74,37 @@ def save_program_statuses(path: str | Path, statuses: dict[str, ProgramRuntimeSt
     temp_path.replace(target)
 
 
-def record_program_success(
+def _record_persistence_warning(path: str | Path, *, operation: str, program_id: str, error: Exception) -> None:
+    """Best-effort warning journal for post-success display persistence errors.
+
+    This journal is deliberately independent from backup/verification truth. Failure
+    to write it is logged only; it must never turn a verified backup into FAILED.
+    """
+    target = Path(path)
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    line = f"{stamp}\t{operation}\t{program_id}\t{type(error).__name__}: {error}\n"
+    try:
+        warning_path = target.parent / _WARNING_LOG
+        warning_path.parent.mkdir(parents=True, exist_ok=True)
+        with warning_path.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+    except Exception:
+        _LOG.warning(
+            "KC program status persistence warning could not be journaled: %s %s: %s",
+            operation,
+            program_id,
+            error,
+        )
+
+
+def _best_effort_success_status(
     path: str | Path,
     *,
     program_id: str,
     job_id: str | None,
-    verify_status: str = "PASS",
-    at: datetime | None = None,
+    verify_status: str,
+    at: datetime | None,
 ) -> ProgramRuntimeStatus:
-    statuses = load_program_statuses(path)
     stamp = (at or datetime.now().astimezone()).isoformat(timespec="seconds")
     status = ProgramRuntimeStatus(
         program_id=program_id,
@@ -88,9 +113,35 @@ def record_program_success(
         verify_status=str(verify_status or "").upper() or None,
         last_error=None,
     )
-    statuses[program_id] = status
-    save_program_statuses(path, statuses)
+    try:
+        statuses = load_program_statuses(path)
+        statuses[program_id] = status
+        save_program_statuses(path, statuses)
+    except Exception as exc:
+        _record_persistence_warning(path, operation="BACKUP_SUCCESS_STATUS", program_id=program_id, error=exc)
     return status
+
+
+def record_program_success(
+    path: str | Path,
+    *,
+    program_id: str,
+    job_id: str | None,
+    verify_status: str = "PASS",
+    at: datetime | None = None,
+) -> ProgramRuntimeStatus:
+    """Record an already completed backup without changing its factual outcome.
+
+    A local status-display persistence problem is secondary metadata failure and is
+    journaled as a warning. It must not downgrade Backup + FULL Verify from SUCCESS.
+    """
+    return _best_effort_success_status(
+        path,
+        program_id=program_id,
+        job_id=job_id,
+        verify_status=verify_status,
+        at=at,
+    )
 
 
 def record_program_verify(
@@ -100,14 +151,38 @@ def record_program_verify(
     verify_status: str,
     error: str | None = None,
 ) -> ProgramRuntimeStatus:
-    """Update verification state without falsifying the last backup timestamp."""
+    """Update verification state without falsifying the last backup timestamp.
+
+    PASS persistence is best-effort because a completed FULL verification remains
+    factually successful even if the local status-display file cannot be updated.
+    FAIL persistence stays strict so genuine verification failures are not hidden.
+    """
+    normalized = str(verify_status or "").upper() or None
+    if normalized == "PASS" and not error:
+        try:
+            statuses = load_program_statuses(path)
+            previous = statuses.get(program_id, ProgramRuntimeStatus(program_id=program_id))
+            status = ProgramRuntimeStatus(
+                program_id=program_id,
+                last_backup_at=previous.last_backup_at,
+                last_job_id=previous.last_job_id,
+                verify_status="PASS",
+                last_error=None,
+            )
+            statuses[program_id] = status
+            save_program_statuses(path, statuses)
+            return status
+        except Exception as exc:
+            _record_persistence_warning(path, operation="VERIFY_PASS_STATUS", program_id=program_id, error=exc)
+            return ProgramRuntimeStatus(program_id=program_id, verify_status="PASS")
+
     statuses = load_program_statuses(path)
     previous = statuses.get(program_id, ProgramRuntimeStatus(program_id=program_id))
     status = ProgramRuntimeStatus(
         program_id=program_id,
         last_backup_at=previous.last_backup_at,
         last_job_id=previous.last_job_id,
-        verify_status=str(verify_status or "").upper() or None,
+        verify_status=normalized,
         last_error=str(error) if error else None,
     )
     statuses[program_id] = status
