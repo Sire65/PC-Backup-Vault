@@ -7,24 +7,31 @@ import os
 import re
 import shutil
 import time
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
+IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico'}
+DOCUMENT_EXTS = {'.md', '.txt', '.pdf', '.docx', '.xlsx', '.pptx', '.csv'}
 INTERESTING_EXTS = {
     '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz',
     '.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql',
-    '.exe', '.msi', '.bat', '.cmd', '.ps1', '.md', '.txt'
+    '.exe', '.msi', '.bat', '.cmd', '.ps1',
+    *IMAGE_EXTS, *DOCUMENT_EXTS,
 }
 SOURCE_EXTS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql'}
 ARCHIVE_EXTS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'}
 PROJECT_WORDS = (
     'kc', 'dienstplan', 'dp2', 'dp3', 'kasse', 'marktkasse', 'manager', 'verwaltung',
     'futura', 'communication', 'backup', 'vault', 'money', 'butler', 'leitstand',
-    'weihnacht', 'wm-', 'wm_', 'inventar', 'bilderkasse', 'bilderrechner'
+    'weihnacht', 'wm-', 'wm_', 'inventar', 'bilderkasse', 'bilderrechner',
+    'assets', 'asset', 'images', 'bilder', 'pos', 'pc-manager',
 )
 VERSION_RE = re.compile(r'(?<!\d)(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[-_.][a-z0-9]+)?)', re.I)
 COPY_WORDS = ('copy', 'kopie', 'alt', 'old', 'backup', 'bak', 'temp', 'tmp', 'test', 'neu', 'new', 'final')
+TEMP_PARTS = {'tmp', 'temp', 'cache', '__pycache__', 'node_modules', '.venv', 'venv', 'dist', 'build'}
+SYSTEM_DIRS = {'$RECYCLE.BIN', 'System Volume Information'}
 
 
 @dataclass
@@ -56,10 +63,11 @@ def _version_hint(name: str) -> str:
 def _score(path: Path, size: int) -> tuple[int, str, str]:
     low = str(path).lower(); ext = path.suffix.lower(); score = 0; reasons = []
     if ext in INTERESTING_EXTS: score += 20; reasons.append('relevanter Dateityp')
-    if any(w in low for w in PROJECT_WORDS): score += 35; reasons.append('Projektbegriff')
+    if any(w in low for w in PROJECT_WORDS): score += 35; reasons.append('Projektbegriff/-ordner')
     if _version_hint(path.name): score += 20; reasons.append('Versionshinweis')
     if ext in ARCHIVE_EXTS: score += 20; reasons.append('Archiv')
     if ext in SOURCE_EXTS: score += 15; reasons.append('Quelltext')
+    if ext in IMAGE_EXTS: score += 10; reasons.append('Bild/Asset')
     if any(w in path.name.lower() for w in COPY_WORDS): score += 5; reasons.append('Versions-/Kopiehinweis')
     if size == 0: score -= 20; reasons.append('leer')
     return max(0, min(score, 100)), ', '.join(reasons), _version_hint(path.name)
@@ -68,6 +76,8 @@ def _score(path: Path, size: int) -> tuple[int, str, str]:
 def _category(ext: str) -> str:
     if ext in ARCHIVE_EXTS: return 'archive'
     if ext in SOURCE_EXTS: return 'source'
+    if ext in IMAGE_EXTS: return 'image_asset'
+    if ext in DOCUMENT_EXTS: return 'document'
     if ext in {'.exe', '.msi', '.bat', '.cmd', '.ps1'}: return 'binary_or_launcher'
     return 'other'
 
@@ -82,21 +92,57 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
+def _normalized_parts(path: str) -> list[str]:
+    return [p.lower() for p in str(path).replace('\\', '/').split('/') if p]
+
+
+def _canonical_rank(item: ScanItem) -> tuple[int, int, int, str]:
+    """Lower is better. Prefer non-temp, project-looking, newer, stable-looking paths."""
+    parts = _normalized_parts(item.path)
+    temp_penalty = 1 if any(p in TEMP_PARTS for p in parts) else 0
+    copy_penalty = 1 if any(w in item.name.lower() for w in COPY_WORDS) else 0
+    project_bonus = -1 if item.score >= 45 else 0
+    return (temp_penalty, copy_penalty, project_bonus, item.path.lower())
+
+
+def _assign_duplicate_groups(items: list[ScanItem]) -> None:
+    groups: dict[str, list[ScanItem]] = defaultdict(list)
+    for item in items:
+        if item.sha256:
+            groups[item.sha256].append(item)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        canonical = sorted(group, key=_canonical_rank)[0]
+        for item in group:
+            if item is canonical:
+                item.duplicate_of = ''
+                if 'bit-identische Dublette' in item.reason:
+                    item.reason = item.reason.replace(', bit-identische Dublette', '').replace('bit-identische Dublette', '').strip(', ')
+                continue
+            item.duplicate_of = canonical.path
+            item.status = 'BLUE'
+            if 'bit-identische Dublette' not in item.reason:
+                item.reason = (item.reason + ', ' if item.reason else '') + 'bit-identische Dublette'
+
+
 def scan(roots: Iterable[str], *, max_hash_bytes: int = 64 * 1024 * 1024,
          hash_only_interesting: bool = True, include_hidden: bool = False,
          progress: Optional[Callable[[int, str], None]] = None,
          stop_requested: Optional[Callable[[], bool]] = None) -> list[ScanItem]:
     """Read-only inventory scan. Does not delete, move, rename, or alter source files."""
-    items: list[ScanItem] = []; seen_hash: dict[str, str] = {}; count = 0
+    items: list[ScanItem] = []; count = 0
     for root_raw in roots:
         root = Path(root_raw).expanduser()
         if not root.exists(): continue
         for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-            if stop_requested and stop_requested(): return items
+            if stop_requested and stop_requested():
+                _assign_duplicate_groups(items); return items
             if not include_hidden:
-                dirnames[:] = [d for d in dirnames if not d.startswith('.') and d not in {'$RECYCLE.BIN', 'System Volume Information'}]
+                dirnames[:] = [d for d in dirnames if not d.startswith('.') and d not in SYSTEM_DIRS]
             for filename in filenames:
-                if stop_requested and stop_requested(): return items
+                if stop_requested and stop_requested():
+                    _assign_duplicate_groups(items); return items
                 path = Path(dirpath) / filename
                 if not include_hidden and filename.startswith('.'): continue
                 try: st = path.stat()
@@ -107,16 +153,12 @@ def scan(roots: Iterable[str], *, max_hash_bytes: int = 64 * 1024 * 1024,
                                 category=_category(ext), version_hint=version, reason=reason)
                 should_hash = st.st_size <= max_hash_bytes and (not hash_only_interesting or score >= 40 or ext in ARCHIVE_EXTS)
                 if should_hash:
-                    try:
-                        item.sha256 = sha256_file(path)
-                        if item.sha256 in seen_hash:
-                            item.duplicate_of = seen_hash[item.sha256]; item.status = 'BLUE'
-                            item.reason = (item.reason + ', ' if item.reason else '') + 'bit-identische Dublette'
-                        else: seen_hash[item.sha256] = item.path
+                    try: item.sha256 = sha256_file(path)
                     except (OSError, PermissionError): pass
-                if item.status != 'BLUE': item.status = 'GREEN' if score >= 75 else 'YELLOW' if score >= 45 else 'WHITE'
+                item.status = 'GREEN' if score >= 75 else 'YELLOW' if score >= 45 else 'WHITE'
                 items.append(item); count += 1
                 if progress and count % 100 == 0: progress(count, str(path))
+    _assign_duplicate_groups(items)
     return items
 
 
