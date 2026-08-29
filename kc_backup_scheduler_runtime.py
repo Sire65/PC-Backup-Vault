@@ -12,6 +12,7 @@ from kc_backup_scheduler import BackupScheduleJob, ScheduleAction
 
 STORE_VERSION = 1
 _AUTO_ACTIONS = {ScheduleAction.BACKUP, ScheduleAction.VERIFY}
+_FINAL_STATES = {"SUCCESS", "FAILED", "BLOCKED", "SKIPPED"}
 _LOCK = threading.RLock()
 
 
@@ -69,6 +70,42 @@ def _write(path: Path, raw: dict) -> None:
     temp_path.replace(path)
 
 
+def _parse_stamp(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+
+
+def _prune_occurrences(raw: dict, *, now: datetime, retention: timedelta = timedelta(days=90)) -> int:
+    """Remove only old terminal occurrences; active/unknown entries are kept fail-safe."""
+    cutoff = now.replace(tzinfo=None) - retention
+    entries = dict(raw.get("occurrences") or {})
+    removed = 0
+    for key, item in list(entries.items()):
+        state = str((item or {}).get("state") or "").upper()
+        if state not in _FINAL_STATES:
+            continue
+        stamp = _parse_stamp((item or {}).get("finished_at")) or _parse_stamp((item or {}).get("scheduled_at"))
+        if stamp is not None and stamp < cutoff:
+            entries.pop(key, None)
+            removed += 1
+    raw["occurrences"] = entries
+    return removed
+
+
+def prune_runtime(path: str | Path, *, now: datetime, retention: timedelta = timedelta(days=90)) -> int:
+    target = Path(path)
+    with _LOCK:
+        raw = _read(target)
+        removed = _prune_occurrences(raw, now=now, retention=retention)
+        if removed:
+            _write(target, raw)
+        return removed
+
+
 def due_dispatches(
     jobs: Iterable[BackupScheduleJob],
     *,
@@ -104,6 +141,7 @@ def record_scheduler_tick(
     target = Path(path)
     with _LOCK:
         raw = _read(target)
+        _prune_occurrences(raw, now=now)
         raw["meta"] = {
             "last_tick_at": now.replace(tzinfo=None).isoformat(timespec="seconds"),
             "paused_reason": str(paused_reason) if paused_reason else None,
@@ -119,14 +157,18 @@ def claim_dispatch(
     now: datetime,
     lease: timedelta = timedelta(hours=2),
 ) -> bool:
-    """Claim one occurrence unless it is complete or has a live lease."""
+    """Claim one occurrence unless it is final or has a live lease.
+
+    FAILED is terminal for this exact occurrence. This prevents retry storms; the
+    next retry is the next scheduled occurrence or an explicit manual run.
+    """
     target = Path(path)
     with _LOCK:
         raw = _read(target)
         entries = raw["occurrences"]
         previous = dict(entries.get(dispatch.occurrence_key) or {})
-        state = str(previous.get("state") or "")
-        if state in {"SUCCESS", "BLOCKED", "SKIPPED"}:
+        state = str(previous.get("state") or "").upper()
+        if state in _FINAL_STATES:
             return False
         if state in {"CLAIMED", "RUNNING"} and previous.get("claimed_at"):
             claimed_at = datetime.fromisoformat(previous["claimed_at"])
@@ -168,7 +210,7 @@ def mark_dispatch(
             "action": dispatch.action.value,
             "scheduled_at": dispatch.scheduled_at.isoformat(timespec="seconds"),
             "state": state,
-            "finished_at": now.replace(tzinfo=None).isoformat(timespec="seconds") if state in {"SUCCESS", "FAILED", "BLOCKED", "SKIPPED"} else None,
+            "finished_at": now.replace(tzinfo=None).isoformat(timespec="seconds") if state in _FINAL_STATES else None,
             "message": message,
         })
         entry.setdefault("claimed_at", now.replace(tzinfo=None).isoformat(timespec="seconds"))
