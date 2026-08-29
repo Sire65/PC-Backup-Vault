@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tkinter import BOTH, X, messagebox, ttk
 
+from .core_jobs_dashboard import CoreJobsDashboard
 from .development_dashboard import DevelopmentDashboard
 from .history_project_finder import HistoryProjectFinderTab
 from .inventory_github_dashboard import InventoryGitHubDashboard
@@ -39,6 +40,7 @@ class ProjectInventoryWorkspace(ttk.Frame):
             get_scan_items=lambda: self.finder.items,
             get_development_summary=get_development_summary,
         )
+        self.core_jobs_dashboard = CoreJobsDashboard(self.notebook)
         self.inventory_github_dashboard = InventoryGitHubDashboard(
             self.notebook,
             get_scan_items=lambda: self.finder.items,
@@ -51,6 +53,7 @@ class ProjectInventoryWorkspace(ttk.Frame):
         self.job_history = JobHistoryTab(self.notebook, output_root=job_output_root)
 
         self.notebook.add(self.dashboard, text="Übersicht")
+        self.notebook.add(self.core_jobs_dashboard, text="Zentrale Jobs")
         self.notebook.add(self.inventory_github_dashboard, text="Inventur / GitHub Dashboard")
         self.notebook.add(self.inventory_history_dashboard, text="Inventur / GitHub Verlauf")
         self.notebook.add(self.finder, text="Festplatten-Analyse")
@@ -148,7 +151,9 @@ class ProjectInventoryWorkspace(ttk.Frame):
 
     def _on_tab_changed(self, _event=None):
         current = self.notebook.nametowidget(self.notebook.select())
-        if current is self.inventory_github_dashboard:
+        if current is self.core_jobs_dashboard:
+            self.core_jobs_dashboard.refresh()
+        elif current is self.inventory_github_dashboard:
             self.inventory_github_dashboard.refresh()
         elif current is self.inventory_history_dashboard:
             self.inventory_history_dashboard.refresh()
