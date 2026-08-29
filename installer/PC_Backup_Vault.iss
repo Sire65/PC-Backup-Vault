@@ -40,4 +40,5 @@ Name: "{autoprograms}\PC Backup Vault"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\PC Backup Vault"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
 Filename: "{app}\{#MyAppExeName}"; Description: "PC Backup Vault jetzt starten"; Flags: nowait postinstall skipifsilent
