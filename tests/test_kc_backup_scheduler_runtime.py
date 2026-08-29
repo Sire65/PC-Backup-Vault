@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from datetime import date, datetime, time, timedelta
@@ -9,6 +10,7 @@ from kc_backup_scheduler_runtime import (
     due_dispatches,
     mark_dispatch,
     occurrence_state,
+    prune_runtime,
     record_scheduler_tick,
     runtime_summary,
 )
@@ -67,6 +69,23 @@ class SchedulerRuntimeTests(unittest.TestCase):
             self.assertEqual(occurrence_state(path, dispatch), "SUCCESS")
             self.assertFalse(claim_dispatch(path, dispatch, now=now + timedelta(hours=3)))
 
+    def test_failed_occurrence_is_final_and_does_not_retry_every_minute(self):
+        job = BackupScheduleJob(
+            program_id="kc-dp2",
+            start_date=date(2026, 8, 29),
+            start_time=time(19, 0),
+            frequency=ScheduleFrequency.DAILY,
+            action=ScheduleAction.BACKUP,
+        )
+        dispatch = due_dispatches([job], now=datetime(2026, 8, 29, 19, 5))[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime.json"
+            now = datetime(2026, 8, 29, 19, 5)
+            self.assertTrue(claim_dispatch(path, dispatch, now=now))
+            mark_dispatch(path, dispatch, state="FAILED", now=now + timedelta(minutes=1), message="Testfehler")
+            self.assertFalse(claim_dispatch(path, dispatch, now=now + timedelta(minutes=2)))
+            self.assertFalse(claim_dispatch(path, dispatch, now=now + timedelta(hours=3)))
+
     def test_stale_claim_can_be_recovered_after_lease(self):
         job = BackupScheduleJob(
             program_id="kc-dp2",
@@ -115,6 +134,28 @@ class SchedulerRuntimeTests(unittest.TestCase):
             self.assertEqual(summary.last_blocked_program, "kc-dp2")
             self.assertEqual(summary.last_blocked_message, "Quelle fehlt")
             self.assertEqual(occurrence_state(path, dispatch), "BLOCKED")
+
+    def test_prune_removes_only_old_terminal_occurrences(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime.json"
+            raw = {
+                "store_version": 1,
+                "meta": {},
+                "occurrences": {
+                    "old-success": {"state": "SUCCESS", "finished_at": "2026-01-01T00:00:00"},
+                    "old-failed": {"state": "FAILED", "finished_at": "2026-01-02T00:00:00"},
+                    "old-running": {"state": "RUNNING", "claimed_at": "2026-01-01T00:00:00"},
+                    "recent-success": {"state": "SUCCESS", "finished_at": "2026-08-20T00:00:00"},
+                },
+            }
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            removed = prune_runtime(path, now=datetime(2026, 8, 29), retention=timedelta(days=90))
+            self.assertEqual(removed, 2)
+            saved = json.loads(path.read_text(encoding="utf-8"))["occurrences"]
+            self.assertIn("old-running", saved)
+            self.assertIn("recent-success", saved)
+            self.assertNotIn("old-success", saved)
+            self.assertNotIn("old-failed", saved)
 
 
 if __name__ == "__main__":
