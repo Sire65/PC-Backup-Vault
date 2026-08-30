@@ -1,0 +1,69 @@
+name: Repair deferred Tkinter callbacks
+
+on:
+  push:
+    branches:
+      - feature/kc-backup-central-security-foundation
+    paths:
+      - '.github/workflows/repair-deferred-errors.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/kc-backup-central-security-foundation
+      - name: Apply exact callback lifetime repairs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('project_finder/ui_tab.py'): [
+                  (
+                      "        except Exception as e:\n            self.after(0, lambda: messagebox.showerror('Projekt-Finder', str(e)))\n            self.after(0, lambda: self.status_var.set('Fehler bei Inventur'))",
+                      "        except Exception as e:\n            error_text = str(e)\n            self.after(0, lambda error_text=error_text: messagebox.showerror('Projekt-Finder', error_text))\n            self.after(0, lambda: self.status_var.set('Fehler bei Inventur'))",
+                  ),
+                  (
+                      "        except Exception as e:\n            self.after(0, lambda: messagebox.showerror('GitHub-Vergleich', f'Vergleich konnte nicht abgeschlossen werden:\\n{e}'))\n            self.after(0, lambda: self.status_var.set('GitHub-Vergleich: Fehler · keine Änderungen durchgeführt'))",
+                      "        except Exception as e:\n            error_text = str(e)\n            self.after(0, lambda error_text=error_text: messagebox.showerror('GitHub-Vergleich', f'Vergleich konnte nicht abgeschlossen werden:\\n{error_text}'))\n            self.after(0, lambda: self.status_var.set('GitHub-Vergleich: Fehler · keine Änderungen durchgeführt'))",
+                  ),
+              ],
+              Path('update_ui.py'): [
+                  (
+                      "                except Exception as exc:\n                    def failed():\n                        progress.stop()",
+                      "                except Exception as exc:\n                    error_text = str(exc)\n                    def failed(error_text=error_text):\n                        progress.stop()",
+                  ),
+                  (
+                      "                        messagebox.showerror(\"Update fehlgeschlagen\", str(exc), parent=win)",
+                      "                        messagebox.showerror(\"Update fehlgeschlagen\", error_text, parent=win)",
+                  ),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected exact match once, got {count}: {old[:80]!r}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+              print('repaired', path)
+          PY
+      - name: Compile repaired files
+        run: python -m py_compile project_finder/ui_tab.py update_ui.py project_finder/development_dashboard.py
+      - name: Commit repaired product code only
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add project_finder/ui_tab.py update_ui.py
+          git diff --cached --check
+          git commit -m 'Fix deferred Tkinter exception callbacks'
+          git push origin HEAD:feature/kc-backup-central-security-foundation
