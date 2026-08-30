@@ -44,6 +44,19 @@ jobs:
           --name PC-Backup-Vault-Inventur
           PROJECT_FINDER_VORSCHAU.py
 
+      - name: Windows EXE startup smoke
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/PC-Backup-Vault-Inventur/PC-Backup-Vault-Inventur.exe'
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 5
+          $proc.Refresh()
+          if ($proc.HasExited) {
+            throw "Inventur-EXE ist beim Start vorzeitig beendet worden (ExitCode=$($proc.ExitCode))."
+          }
+          Stop-Process -Id $proc.Id -Force
+          Write-Host 'Windows Inventur-EXE Starttest: OK'
+
       - name: Add safety and usage notice
         shell: pwsh
         run: |
