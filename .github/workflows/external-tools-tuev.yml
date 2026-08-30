@@ -72,7 +72,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/kc-node-audit"
           cd "$RUNNER_TEMP/kc-node-audit"
           npm init -y >/dev/null
-          npm install --no-save yaml @playwright/test
+          npm install --save-exact yaml @playwright/test
           node - "$GITHUB_WORKSPACE" <<'NODE'
           const fs = require('fs');
           const path = require('path');
