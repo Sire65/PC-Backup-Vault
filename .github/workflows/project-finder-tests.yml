@@ -1,10 +1,12 @@
 name: Project Finder Regression
 
+# Final regression gate for the repaired inventory/Git handoff branch.
 on:
   push:
     branches:
       - feature/project-finder-safe-cleanup
       - feature/project-finder-productive-inventory
+      - feature/kc-backup-central-security-foundation
     paths:
       - 'project_finder/**'
       - 'app.py'

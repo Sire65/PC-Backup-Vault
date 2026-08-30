@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/project-finder-productive-inventory
+      - feature/kc-backup-central-security-foundation
     paths:
       - '**.py'
       - 'requirements.txt'
@@ -71,6 +72,51 @@ jobs:
           fi
           echo 'Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule unverändert.'
 
+      - name: Backup-Central-Sicherheitskette prüfen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required_files = [
+              'kc_backup_contract.py',
+              'kc_backup_security.py',
+              'kc_backup_scheduler.py',
+              'kc_backup_scheduler_ui.py',
+              'kc_backup_job_store.py',
+              'kc_backup_engine_adapter.py',
+              'kc_backup_program_registry.py',
+              'kc_backup_program_store.py',
+              'kc_backup_programs_ui.py',
+              'kc_backup_program_status.py',
+              'kc_backup_central_integration.py',
+          ]
+          missing_files = [p for p in required_files if not Path(p).exists()]
+          if missing_files:
+              raise SystemExit('Backup Central unvollständig: ' + ', '.join(missing_files))
+
+          adapter = Path('kc_backup_engine_adapter.py').read_text(encoding='utf-8')
+          integration = Path('kc_backup_central_integration.py').read_text(encoding='utf-8')
+          registry = Path('kc_backup_program_registry.py').read_text(encoding='utf-8')
+          scheduler = Path('kc_backup_job_store.py').read_text(encoding='utf-8')
+          status = Path('kc_backup_program_status.py').read_text(encoding='utf-8')
+
+          checks = {
+              'Adapter nur BACKUP': 'prepared.action != ScheduleAction.BACKUP' in adapter,
+              'Recovery-Hook wird weitergereicht': 'recovery_hook=recovery_hook' in adapter,
+              'One-Touch verlangt Recovery-Material': 'recovery_material_ready=recovery_ready' in integration,
+              'One-Touch führt FULL-Verify aus': 'mode="FULL"' in integration,
+              'FULL-Verify muss PASS sein': '!= "PASS"' in integration,
+              'Kein automatischer Restore im Adapter': 'restore_file' not in adapter,
+              'Programmquellen werden nicht geraten': 'configured_path: str | None = None' in registry,
+              'Scheduler speichert atomar': 'NamedTemporaryFile' in scheduler and '.replace(target)' in scheduler,
+              'Programmstatus speichert atomar': 'NamedTemporaryFile' in status and '.replace(target)' in status,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit('Backup-Central-TÜV fehlgeschlagen: ' + '; '.join(failed))
+          print('Backup-Central-TÜV: alle Sicherheitsgates erfüllt.')
+          PY
+
       - name: Update-Sicherheitsmerkmale prüfen
         run: |
           python - <<'PY'
@@ -97,5 +143,6 @@ jobs:
             echo '- Programm-/Installer-Version abgeglichen'
             echo '- Release-Workflow mit SHA-256 und Regression geprüft'
             echo '- Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule gegen main isoliert'
+            echo '- Backup-Central-Sicherheitskette mit One-Touch, FULL-Verify, Recovery, Registry und atomarer Persistenz geprüft'
             echo '- Updater-Sicherheitsmerkmale geprüft'
           } >> "$GITHUB_STEP_SUMMARY"

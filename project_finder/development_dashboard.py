@@ -109,7 +109,8 @@ class DevelopmentDashboard(ttk.Frame):
                 f"Chat-Inventur fertig · {inv.get('conversation_count', 0):,} Chats · {inv.get('selected_count', 0):,} entwicklungsrelevant"
             ))
         except Exception as exc:
-            self.after(0, lambda: messagebox.showerror("Chat-Inventur", str(exc)))
+            error_text = str(exc)
+            self.after(0, lambda error_text=error_text: messagebox.showerror("Chat-Inventur", error_text))
             self.after(0, lambda: self.status.set("Fehler beim Chat-Import"))
 
     def save_chat_inventory(self):

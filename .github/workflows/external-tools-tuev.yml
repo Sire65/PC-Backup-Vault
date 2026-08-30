@@ -1,0 +1,166 @@
+name: Fremdsoftware Tiefen-TÜV
+
+on:
+  push:
+    branches:
+      - feature/kc-backup-central-security-foundation
+    paths:
+      - '**.py'
+      - '**.json'
+      - '**.yml'
+      - '**.yaml'
+      - 'requirements.txt'
+      - 'project_finder/**'
+      - '.github/workflows/external-tools-tuev.yml'
+  pull_request:
+    paths:
+      - '**.py'
+      - '**.json'
+      - '**.yml'
+      - '**.yaml'
+      - 'requirements.txt'
+      - 'project_finder/**'
+      - '.github/workflows/external-tools-tuev.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  third-party-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install application and independent audit tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pip-audit
+
+      - name: Full Python compile and regression
+        run: |
+          python -m compileall -q .
+          python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Ruff critical correctness gate
+        run: ruff check . --select E9,F63,F7,F82 --exclude build,dist,.venv,venv
+
+      - name: Dependency vulnerability audit
+        run: pip-audit -r requirements.txt
+
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Independent JSON and YAML parser audit with Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kc-node-audit"
+          cd "$RUNNER_TEMP/kc-node-audit"
+          npm init -y >/dev/null
+          npm install --save-exact yaml @playwright/test
+          node - "$GITHUB_WORKSPACE" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const YAML = require('yaml');
+          const root = process.argv[2];
+          const skip = new Set(['.git','node_modules','build','dist','.venv','venv','__pycache__']);
+          let checked = 0;
+          const failures = [];
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+              if (skip.has(entry.name)) continue;
+              const p = path.join(dir, entry.name);
+              if (entry.isDirectory()) { walk(p); continue; }
+              try {
+                if (entry.name.endsWith('.json')) {
+                  JSON.parse(fs.readFileSync(p, 'utf8'));
+                  checked++;
+                } else if (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) {
+                  YAML.parse(fs.readFileSync(p, 'utf8'));
+                  checked++;
+                }
+              } catch (e) {
+                failures.push(`${path.relative(root,p)}: ${e.message}`);
+              }
+            }
+          }
+          walk(root);
+          if (failures.length) {
+            console.error(failures.join('\n'));
+            process.exit(1);
+          }
+          console.log(`Node parser audit OK: ${checked} JSON/YAML files`);
+          NODE
+
+      - name: npm dependency audit for external test harness
+        working-directory: ${{ runner.temp }}/kc-node-audit
+        run: npm audit --audit-level=high
+
+      - name: Install Chromium for Playwright
+        working-directory: ${{ runner.temp }}/kc-node-audit
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright Chromium and Node SHA-256 smoke
+        working-directory: ${{ runner.temp }}/kc-node-audit
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const { createHash } = require('node:crypto');
+          (async () => {
+            const browser = await chromium.launch({headless: true});
+            const page = await browser.newPage();
+            await page.setContent('<!doctype html><meta charset="utf-8"><title>KC TÜV</title><main id="status">PASS</main>');
+            const title = await page.title();
+            const status = await page.locator('#status').textContent();
+            const domProbe = await page.evaluate(() => document.querySelectorAll('main#status').length);
+            const digest = createHash('sha256').update('PC Backup Vault TÜV', 'utf8').digest('hex');
+            if (title !== 'KC TÜV' || status !== 'PASS' || domProbe !== 1 || digest.length !== 64) {
+              throw new Error('Chromium/Node smoke failed');
+            }
+            console.log('Playwright/Chromium DOM smoke OK, Node SHA-256 OK');
+            await browser.close();
+          })().catch(e => { console.error(e); process.exit(1); });
+          NODE
+
+      - name: Git safety rule gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -n -E 'git[[:space:]]+push[[:space:]].*--force|git[[:space:]]+reset[[:space:]]+--hard[[:space:]]+origin/main' -- '*.py' '*.ps1' '*.sh' ':!tests/**' ':!project_finder/tests/**'; then
+            echo 'Unsichere Git-Zwangsoperation im Produktivcode gefunden.'
+            exit 1
+          fi
+          echo 'Keine direkte Force-Push/Hard-Reset-Regelverletzung gefunden.'
+
+      - name: TÜV summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Fremdsoftware Tiefen-TÜV'
+            echo '- Python compile + komplette Regression'
+            echo '- Ruff kritische Fehlerklassen'
+            echo '- pip-audit Abhängigkeits-CVEs'
+            echo '- Node.js unabhängiges JSON/YAML Parsing'
+            echo '- npm audit des Test-Harness'
+            echo '- Playwright + Chromium DOM-Smoke'
+            echo '- Node.js SHA-256 Smoke'
+            echo '- Git Force-Push/Hard-Reset Regelgate'
+            echo '- Hinweis: Playwright prüft Browser/Toolchain, nicht die native Tkinter-Oberfläche.'
+          } >> "$GITHUB_STEP_SUMMARY"

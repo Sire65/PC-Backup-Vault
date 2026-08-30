@@ -186,7 +186,8 @@ class ProjectFinderTab(ttk.Frame):
             )
             self.after(0, self._render)
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror('Projekt-Finder', str(e)))
+            error_text = str(e)
+            self.after(0, lambda error_text=error_text: messagebox.showerror('Projekt-Finder', error_text))
             self.after(0, lambda: self.status_var.set('Fehler bei Inventur'))
 
     def stop_scan(self):
@@ -277,7 +278,8 @@ class ProjectFinderTab(ttk.Frame):
             self.github_by_path = {row['path']: row for row in report.get('items', [])}
             self.after(0, self._render_github_compare)
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror('GitHub-Vergleich', f'Vergleich konnte nicht abgeschlossen werden:\n{e}'))
+            error_text = str(e)
+            self.after(0, lambda error_text=error_text: messagebox.showerror('GitHub-Vergleich', f'Vergleich konnte nicht abgeschlossen werden:\n{error_text}'))
             self.after(0, lambda: self.status_var.set('GitHub-Vergleich: Fehler · keine Änderungen durchgeführt'))
 
     def _render_github_compare(self):

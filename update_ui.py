@@ -121,7 +121,8 @@ def enable_auto_update(app_class):
                         self.after(350, self._close_for_update)
                     self.after(0, ready)
                 except Exception as exc:
-                    def failed():
+                    error_text = str(exc)
+                    def failed(error_text=error_text):
                         progress.stop()
                         progress.configure(mode="determinate")
                         progress["value"] = 0
@@ -129,7 +130,7 @@ def enable_auto_update(app_class):
                         detail.configure(text="Die bestehende Installation bleibt unverändert.")
                         btn_install.configure(state="normal")
                         btn_later.configure(state="normal")
-                        messagebox.showerror("Update fehlgeschlagen", str(exc), parent=win)
+                        messagebox.showerror("Update fehlgeschlagen", error_text, parent=win)
                     self.after(0, failed)
 
             threading.Thread(target=worker, daemon=True).start()
