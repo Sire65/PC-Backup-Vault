@@ -1,5 +1,6 @@
 name: Project Finder Windows Inventory
 
+# Final Windows packaging gate for the repaired inventory runner.
 on:
   push:
     branches:
