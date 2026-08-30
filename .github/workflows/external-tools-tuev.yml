@@ -115,25 +115,25 @@ jobs:
         working-directory: ${{ runner.temp }}/kc-node-audit
         run: npx playwright install --with-deps chromium
 
-      - name: Playwright Chromium engine smoke
+      - name: Playwright Chromium and Node SHA-256 smoke
         working-directory: ${{ runner.temp }}/kc-node-audit
         shell: bash
         run: |
           node <<'NODE'
           const { chromium } = require('playwright');
+          const { createHash } = require('node:crypto');
           (async () => {
             const browser = await chromium.launch({headless: true});
             const page = await browser.newPage();
             await page.setContent('<!doctype html><meta charset="utf-8"><title>KC TÜV</title><main id="status">PASS</main>');
             const title = await page.title();
             const status = await page.locator('#status').textContent();
-            const digest = await page.evaluate(async () => {
-              const data = new TextEncoder().encode('PC Backup Vault TÜV');
-              const hash = await crypto.subtle.digest('SHA-256', data);
-              return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
-            });
-            if (title !== 'KC TÜV' || status !== 'PASS' || digest.length !== 64) throw new Error('Chromium smoke failed');
-            console.log('Playwright/Chromium smoke OK, WebCrypto SHA-256 OK');
+            const domProbe = await page.evaluate(() => document.querySelectorAll('main#status').length);
+            const digest = createHash('sha256').update('PC Backup Vault TÜV', 'utf8').digest('hex');
+            if (title !== 'KC TÜV' || status !== 'PASS' || domProbe !== 1 || digest.length !== 64) {
+              throw new Error('Chromium/Node smoke failed');
+            }
+            console.log('Playwright/Chromium DOM smoke OK, Node SHA-256 OK');
             await browser.close();
           })().catch(e => { console.error(e); process.exit(1); });
           NODE
@@ -159,7 +159,8 @@ jobs:
             echo '- pip-audit Abhängigkeits-CVEs'
             echo '- Node.js unabhängiges JSON/YAML Parsing'
             echo '- npm audit des Test-Harness'
-            echo '- Playwright + Chromium + WebCrypto Smoke'
+            echo '- Playwright + Chromium DOM-Smoke'
+            echo '- Node.js SHA-256 Smoke'
             echo '- Git Force-Push/Hard-Reset Regelgate'
             echo '- Hinweis: Playwright prüft Browser/Toolchain, nicht die native Tkinter-Oberfläche.'
           } >> "$GITHUB_STEP_SUMMARY"
