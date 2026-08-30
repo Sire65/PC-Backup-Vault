@@ -1,5 +1,6 @@
 name: Project Finder Regression
 
+# Final regression gate for the repaired inventory/Git handoff branch.
 on:
   push:
     branches:
