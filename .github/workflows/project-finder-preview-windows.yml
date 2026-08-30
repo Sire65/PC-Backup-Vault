@@ -5,6 +5,7 @@ on:
     branches:
       - feature/project-finder-safe-cleanup
       - feature/project-finder-productive-inventory
+      - feature/kc-backup-central-security-foundation
     paths:
       - 'project_finder/**'
       - 'PROJECT_FINDER_VORSCHAU.py'
