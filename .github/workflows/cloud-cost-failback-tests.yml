@@ -1,0 +1,63 @@
+name: PC Backup Vault Cloud-Kostenschutz
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/cloud-cost-failback
+    paths:
+      - 'cloud_failback.py'
+      - 'app.py'
+      - 'tests/test_cloud_failback.py'
+      - '.github/workflows/cloud-cost-failback-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-cost-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Neue Cloud-Schutzschicht kompilieren
+        run: |
+          python -m py_compile cloud_failback.py app.py
+
+      - name: Null-Euro-Regression ausführen
+        run: |
+          python -m unittest tests.test_cloud_failback -v
+
+      - name: Sicherheitsmerkmale statisch prüfen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('cloud_failback.py').read_text(encoding='utf-8')
+          required = [
+              'DEFAULT_SAFETY_GB = 0.5',
+              'conservative_planned_bytes',
+              '_preflight(combined, "B2", paths)',
+              '_preflight(combined, "R2", paths)',
+              '_ask_user',
+              'Es wurde noch nichts hochgeladen',
+              'r2::',
+              'b2::',
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit('Cloud-Kostenschutz unvollständig: ' + ', '.join(missing))
+          print('Cloud-Kostenschutz: statische Sicherheitsmerkmale vorhanden.')
+          PY
