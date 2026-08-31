@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from .target_guard import recovery_target_is_safe
+
 
 class RecoveryStage(str, Enum):
     DETECT = "detect"
@@ -23,6 +25,9 @@ class RecoveryPlanState:
     image_verified: bool = False
     analysis_complete: bool = False
     recovery_target: str = ""
+    source_device_id: str = ""
+    image_device_id: str = ""
+    recovery_target_device_id: str = ""
 
     def allowed(self, stage: RecoveryStage) -> bool:
         """Prerequisite gate: unavailable recovery actions are not executable."""
@@ -41,7 +46,7 @@ class RecoveryPlanState:
         return False
 
     @property
-    def safe_target_selected(self) -> bool:
+    def path_target_is_separate(self) -> bool:
         if not self.recovery_target or not self.image_path:
             return False
         try:
@@ -49,8 +54,16 @@ class RecoveryPlanState:
             image = Path(self.image_path).resolve()
         except Exception:
             return False
-        # Recovery output must never be the image itself or a child of the image file path.
         return target != image
+
+    @property
+    def safe_target_selected(self) -> bool:
+        """Require both a different path and three known, distinct physical devices."""
+        return self.path_target_is_separate and recovery_target_is_safe(
+            self.source_device_id,
+            self.image_device_id,
+            self.recovery_target_device_id,
+        )
 
     @property
     def next_stage(self) -> RecoveryStage:
@@ -82,5 +95,5 @@ def safety_summary(state: RecoveryPlanState) -> tuple[str, ...]:
     if not state.image_verified:
         notes.append("Analyse/Recovery bleibt bis zur Image-Verifikation gesperrt.")
     if not state.safe_target_selected:
-        notes.append("Recovery benötigt ein separates Ziel; Original und Image werden nicht überschrieben.")
+        notes.append("Recovery benötigt ein separates physisches Ziel; Quelle, Image-Ziel und Rettungsziel müssen eindeutig verschieden sein.")
     return tuple(notes)
