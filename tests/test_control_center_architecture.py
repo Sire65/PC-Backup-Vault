@@ -7,15 +7,12 @@ import framework_core_adapters as fca
 class ControlCenterArchitectureTests(unittest.TestCase):
     def test_required_modules_are_registered(self):
         ids = {m.module_id for m in control_center.MODULES}
-        self.assertEqual(
-            ids,
-            {"backup", "cloud", "disk", "nas", "finder", "git", "restore", "tuev", "settings"},
-        )
+        self.assertEqual(ids, {"backup", "cloud", "disk", "nas", "finder", "git", "restore", "tuev", "settings"})
 
-    def test_nas_is_not_pretended_ready(self):
+    def test_nas_has_real_opener_instead_of_placeholder_readiness(self):
         nas = next(m for m in control_center.MODULES if m.module_id == "nas")
-        self.assertEqual(nas.readiness, "integration")
-        self.assertIsNone(nas.opener_name)
+        self.assertEqual(nas.opener_name, "open_nas_recovery")
+        self.assertNotEqual(nas.readiness, "integration")
 
     def test_framework_provenance_is_explicit(self):
         self.assertIn("window_core", fca.FRAMEWORK_PROVENANCE)
