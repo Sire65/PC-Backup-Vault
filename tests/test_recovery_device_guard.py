@@ -1,6 +1,6 @@
 import unittest
 
-from nas_recovery.device_resolver import drive_letter_from_path, parse_disk_resolution
+from nas_recovery.device_resolver import canonical_disk_id, drive_letter_from_path, parse_disk_resolution
 from nas_recovery.target_guard import devices_are_distinct, image_target_disk_is_safe, recovery_target_is_safe
 
 
@@ -21,11 +21,12 @@ class RecoveryDeviceGuardTests(unittest.TestCase):
         self.assertEqual(drive_letter_from_path("e:/recovered"), "E")
         self.assertEqual(drive_letter_from_path(r"\\server\share\file.img"), "")
 
-    def test_read_only_resolution_parser_prefers_unique_id(self):
+    def test_read_only_resolution_uses_same_disk_number_namespace(self):
         result = parse_disk_resolution(r"D:\image.img", '{"DiskNumber":8,"UniqueId":"ABC-123"}')
         self.assertTrue(result.known)
         self.assertEqual(result.disk_number, 8)
-        self.assertEqual(result.device_id, "ABC-123")
+        self.assertEqual(result.device_id, "disk-number:8")
+        self.assertEqual(canonical_disk_id(8), result.device_id)
 
     def test_resolution_parser_fails_closed(self):
         result = parse_disk_resolution(r"D:\image.img", "not-json")
