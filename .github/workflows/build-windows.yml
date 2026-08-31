@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/project-finder-productive-inventory
+      - feature/modular-control-center
     paths:
       - "**.py"
       - "requirements.txt"
@@ -37,7 +38,9 @@ jobs:
 
       - name: Integrierten Quellstand kompilieren
         shell: pwsh
-        run: python -m compileall -q app.py auto_updater.py update_ui.py project_finder
+        run: |
+          python -m compileall -q app.py auto_updater.py update_ui.py project_finder nas_recovery
+          python -m py_compile control_center.py framework_core_adapters.py final_consolidation.py release_gate.py operation_progress.py vault_db.py
 
       - name: PC Backup Vault bauen
         shell: pwsh
