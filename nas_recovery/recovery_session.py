@@ -20,6 +20,9 @@ class RecoverySession:
     image_complete: bool = False
     image_verified: bool = False
     analysis_complete: bool = False
+    source_device_id: str = ""
+    image_device_id: str = ""
+    recovery_target_device_id: str = ""
 
     def plan_state(self) -> RecoveryPlanState:
         return RecoveryPlanState(
@@ -30,6 +33,9 @@ class RecoverySession:
             image_verified=self.image_verified,
             analysis_complete=self.analysis_complete,
             recovery_target=self.recovery_target,
+            source_device_id=self.source_device_id,
+            image_device_id=self.image_device_id,
+            recovery_target_device_id=self.recovery_target_device_id,
         )
 
     def save(self, path: str | Path) -> Path:
