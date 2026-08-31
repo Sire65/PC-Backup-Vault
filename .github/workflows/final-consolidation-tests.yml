@@ -1,0 +1,54 @@
+name: Final Consolidation Gate
+
+on:
+  push:
+    branches:
+      - feature/modular-control-center
+    paths:
+      - 'final_consolidation.py'
+      - 'framework_core_adapters.py'
+      - 'function_catalog.py'
+      - 'release_gate.py'
+      - 'nas_recovery/**'
+      - 'tests/test_final_consolidation.py'
+      - 'tests/test_release_usability_bundle.py'
+      - 'tests/test_recovery_hardening_bundle.py'
+      - 'tests/test_recovery_device_guard.py'
+      - '.github/workflows/final-consolidation-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  final-consolidation:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        shell: pwsh
+        run: python -m pip install -r requirements.txt
+      - name: Compile final gate
+        shell: pwsh
+        run: python -m py_compile final_consolidation.py release_gate.py function_catalog.py framework_core_adapters.py
+      - name: Final consolidation contract tests
+        shell: pwsh
+        run: python -m unittest tests.test_final_consolidation -v
+      - name: Final usability regression
+        shell: pwsh
+        run: python -m unittest tests.test_release_usability_bundle -v
+      - name: Recovery hardening regression
+        shell: pwsh
+        run: python -m unittest tests.test_recovery_hardening_bundle tests.test_recovery_device_guard -v
+      - name: Framework Studio and safety governance markers
+        shell: pwsh
+        run: |
+          $gate = Get-Content final_consolidation.py -Raw
+          $fa = Get-Content framework_core_adapters.py -Raw
+          $arch = Get-Content ARCHITEKTUR_UND_REGELN.md -Raw
+          if ($gate -notmatch 'Fail-closed final consolidation gate') { throw 'final consolidation fail-closed rule missing' }
+          if ($gate -notmatch 'it never merges or mutates main') { throw 'main protection marker missing' }
+          if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework Studio adapter governance missing' }
+          if ($arch -notmatch 'Keine automatischen Hintergrund-Backups') { throw 'manual-backup architecture rule missing' }
+          if ($arch -notmatch 'Pause/Fortsetzen und Abbrechen') { throw 'runtime control architecture rule missing' }
+          if ($arch -notmatch 'Single-Instance') { throw 'single-instance architecture rule missing' }
