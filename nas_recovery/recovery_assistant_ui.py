@@ -165,7 +165,10 @@ class RecoveryAssistantWindow(tk.Toplevel):
 
     def _run_next(self):
         if self._verification_busy: return
-        stage = self.coordinator.session.plan_state().next_stage
+        state = self.coordinator.session.plan_state()
+        if state.allowed(RecoveryStage.RECOVER):
+            return
+        stage = state.next_stage
         handler = {RecoveryStage.DETECT:self._take_source, RecoveryStage.ASSESS:self._confirm_assessment, RecoveryStage.IMAGE:self._choose_image, RecoveryStage.VERIFY:self._verify, RecoveryStage.ANALYZE:self._analyze, RecoveryStage.RECOVER:self._choose_target}.get(stage)
         if handler: handler()
 
@@ -185,4 +188,5 @@ class RecoveryAssistantWindow(tk.Toplevel):
         next_stage = state.next_stage; self.progress_label.configure(text=f"Schritt {min(completed + 1, 6)} von 6 · {STAGE_LABELS[next_stage]}")
         ids=(state.source_device_id or "?",state.image_device_id or "?",state.recovery_target_device_id or "?"); self.info.configure(text=f"Physische Geräte: Quelle {ids[0]} · Image-Ziel {ids[1]} · Rettungsziel {ids[2]}. Freigabe nur bei eindeutig getrennten Geräten.")
         ready=state.allowed(RecoveryStage.RECOVER); self.ready_label.configure(text="RECOVERY FREIGEGEBEN" if ready else "Recovery gesperrt")
-        next_allowed=(self.selected_disk is not None) if next_stage is RecoveryStage.DETECT else state.allowed(next_stage); self.btn_next.configure(state="normal" if not busy and next_allowed else "disabled", text="Prüfung läuft …" if busy else "Recovery vorbereitet" if ready else "Nächster Schritt")
+        next_allowed=False if ready else ((self.selected_disk is not None) if next_stage is RecoveryStage.DETECT else state.allowed(next_stage))
+        self.btn_next.configure(state="normal" if not busy and next_allowed else "disabled", text="Prüfung läuft …" if busy else "Recovery vorbereitet" if ready else "Nächster Schritt")
