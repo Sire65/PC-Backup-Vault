@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from framework_core_adapters import TOKENS, apply_design_adapter, bind_window_escape, configure_table, normalize_window_geometry
+from operation_progress import OperationProgressTracker, progress_text
 from user_guidance import friendly_error
 from .device_resolver import WindowsPathDeviceResolver
 from .image_verification import VerificationCancelled
@@ -25,6 +26,7 @@ class RecoveryAssistantWindow(tk.Toplevel):
         self._verify_thread = None
         self._verify_cancel = False
         self._verification_busy = False
+        self._verify_progress_tracker = None
         self.title("PC Backup Vault – Recovery-Assistent")
         self.configure(bg=TOKENS.bg)
         apply_design_adapter(self)
@@ -46,7 +48,7 @@ class RecoveryAssistantWindow(tk.Toplevel):
 
         verify_box = ttk.Frame(self, style="Surface.TFrame", padding=(18, 0, 18, 8)); verify_box.pack(fill="x")
         self.verify_progress = ttk.Progressbar(verify_box, maximum=100, mode="determinate"); self.verify_progress.pack(side="left", fill="x", expand=True)
-        self.verify_label = ttk.Label(verify_box, text="Image-Prüfung nicht aktiv", style="Muted.TLabel"); self.verify_label.pack(side="left", padx=(10, 0))
+        self.verify_label = ttk.Label(verify_box, text="Image-Prüfung nicht aktiv", style="Muted.TLabel", wraplength=760, justify="left"); self.verify_label.pack(side="left", padx=(10, 0))
         self.btn_cancel_verify = ttk.Button(verify_box, text="Prüfung abbrechen", command=self._cancel_verify, state="disabled"); self.btn_cancel_verify.pack(side="right", padx=(10,0))
 
         body = ttk.Frame(self, style="Vault.TFrame", padding=16); body.pack(fill="both", expand=True)
@@ -106,12 +108,17 @@ class RecoveryAssistantWindow(tk.Toplevel):
     def _verify(self):
         if self._verification_busy: return
         self._verification_busy = True; self._verify_cancel = False
-        self.verify_progress.configure(value=0); self.verify_label.configure(text="SHA-256 wird read-only berechnet …"); self.btn_cancel_verify.configure(state="normal")
+        self._verify_progress_tracker = OperationProgressTracker()
+        self.verify_progress.configure(value=0); self.verify_label.configure(text="0,0 % · Image wird read-only geprüft · Restzeit wird berechnet …"); self.btn_cancel_verify.configure(state="normal")
         self._refresh()
 
         def progress(done, total):
-            percent = 0 if not total else min(100.0, done * 100.0 / total)
-            self.after(0, lambda p=percent: (self.verify_progress.configure(value=p), self.verify_label.configure(text=f"Image-Prüfung {p:.1f} %")))
+            tracker = self._verify_progress_tracker
+            if tracker is None:
+                return
+            snapshot = tracker.snapshot(done, total, current_step="SHA-256 read-only")
+            text = progress_text(snapshot, noun="Blöcke")
+            self.after(0, lambda p=snapshot.percent, t=text: (self.verify_progress.configure(value=p), self.verify_label.configure(text=t)))
 
         def worker():
             error = None
@@ -124,9 +131,9 @@ class RecoveryAssistantWindow(tk.Toplevel):
         self._verify_thread = threading.Thread(target=worker, name="RecoveryImageVerify", daemon=True); self._verify_thread.start()
 
     def _verify_done(self, error):
-        self._verification_busy = False; self._verify_thread = None; self.btn_cancel_verify.configure(state="disabled")
+        self._verification_busy = False; self._verify_thread = None; self._verify_progress_tracker = None; self.btn_cancel_verify.configure(state="disabled")
         if error is None:
-            self.verify_progress.configure(value=100); self.verify_label.configure(text="Image-Prüfung vollständig abgeschlossen")
+            self.verify_progress.configure(value=100); self.verify_label.configure(text="100,0 % · Image-Prüfung vollständig abgeschlossen · Restzeit 0 s")
             messagebox.showinfo("Image-Verifikation", "SHA-256 wurde vollständig berechnet und ein Verifikationsmanifest erzeugt.", parent=self)
         elif isinstance(error, VerificationCancelled):
             self.verify_progress.configure(value=0); self.verify_label.configure(text="Image-Prüfung abgebrochen · nicht verifiziert")
