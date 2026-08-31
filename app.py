@@ -12,6 +12,7 @@ from nas_recovery.network_ui import NasNetworkWindow
 from nas_recovery.raid_ui_integration import enable_raid_workspace
 from nas_recovery.ssh_legacy_ui_integration import enable_legacy_ssh_probe
 from nas_recovery.inventory_ui_integration import enable_nas_inventory_view
+from nas_recovery.ssh_ui_hardening import enable_ssh_ui_hardening
 from nas_recovery.workflow_ui import enable_nas_workflow_ui
 import control_center as control_center_module
 from control_center import enable_control_center
@@ -26,6 +27,7 @@ enable_provider_registry(App)
 enable_raid_workspace(NasRecoveryWindow)
 enable_legacy_ssh_probe(NasNetworkWindow)
 enable_nas_inventory_view(NasNetworkWindow)
+enable_ssh_ui_hardening(NasNetworkWindow)
 enable_nas_workflow_ui(NasRecoveryWindow)
 enable_nas_recovery(App)
 enable_nas_control_center_bridge()
