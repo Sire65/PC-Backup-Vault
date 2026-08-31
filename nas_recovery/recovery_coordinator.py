@@ -2,12 +2,25 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import re
 from typing import Callable
 
+from .device_resolver import canonical_disk_id
 from .image_verification import verify_image, write_manifest
 from .raid_analysis import inspect_image
 from .recovery_plan import RecoveryStage
 from .recovery_session import RecoverySession
+from .target_guard import recovery_target_is_safe
+
+_PHYSICAL_DRIVE_RE = re.compile(r"physicaldrive(\d+)$", re.IGNORECASE)
+
+
+def _canonical_source_device_id(device_id: str) -> str:
+    raw = str(device_id or "").strip()
+    match = _PHYSICAL_DRIVE_RE.search(raw.replace("/", "\\"))
+    if match:
+        return canonical_disk_id(int(match.group(1)))
+    return raw
 
 
 class RecoveryCoordinator:
@@ -24,7 +37,8 @@ class RecoveryCoordinator:
         self.last_manifest: Path | None = None
 
     def identify_source(self, label: str, device: str = "", size: int = 0, device_id: str = "") -> RecoverySession:
-        self.session = replace(self.session, source_label=str(label), source_device=str(device), source_size=int(size or 0), source_device_id=str(device_id or device), source_identified=True)
+        canonical_id = _canonical_source_device_id(str(device_id or device))
+        self.session = replace(self.session, source_label=str(label), source_device=str(device), source_size=int(size or 0), source_device_id=canonical_id, source_identified=True)
         return self.session
 
     def mark_source_assessed(self) -> RecoverySession:
@@ -39,6 +53,12 @@ class RecoveryCoordinator:
             raise ValueError("Nur eine vorhandene, nicht leere Image-Datei kann übernommen werden.")
         if not self.session.source_assessed:
             raise RuntimeError("Quellzustand muss vor der Image-Übernahme geprüft sein.")
+        image_size = image.stat().st_size
+        if self.session.source_size > 0 and image_size != self.session.source_size:
+            raise ValueError(
+                f"Image-Größe passt nicht zur Quelle: {image_size} statt {self.session.source_size} Bytes. "
+                "Ein unvollständiges Image wird nicht als abgeschlossen freigegeben."
+            )
         self.session = replace(self.session, image_path=str(image.resolve()), image_complete=True, image_verified=False, analysis_complete=False, image_sha256="", image_device_id=str(device_id or ""), recovery_target="", recovery_target_device_id="")
         return self.session
 
@@ -69,8 +89,12 @@ class RecoveryCoordinator:
         image = Path(self.session.image_path).resolve() if self.session.image_path else None
         if image is not None and target == image:
             raise ValueError("Recovery-Ziel darf nicht die Image-Datei sein.")
+        target_device_id = str(device_id or "").strip()
+        if not recovery_target_is_safe(self.session.source_device_id, self.session.image_device_id, target_device_id):
+            raise ValueError("Recovery-Ziel ist nicht eindeutig als dritter, physisch getrennter Datenträger nachgewiesen.")
+        # No filesystem side effect occurs before the physical-device safety gate is green.
         target.mkdir(parents=True, exist_ok=True)
-        self.session = replace(self.session, recovery_target=str(target), recovery_target_device_id=str(device_id or ""))
+        self.session = replace(self.session, recovery_target=str(target), recovery_target_device_id=target_device_id)
         return self.session
 
     @property
