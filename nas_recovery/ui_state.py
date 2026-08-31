@@ -63,6 +63,7 @@ def apply_nas_button_states(window) -> NasUiState:
         "Image erstellen / fortsetzen": state.can_start_image,
         "…": state.can_use_disk_actions,
         "0. Fehlende Festplatte suchen": state.can_open_secondary_tools,
+        "Recovery-Assistent öffnen": state.can_open_secondary_tools,
         "3. RAID-Image-Analyse öffnen": state.can_open_secondary_tools,
         "4. NAS-Netzwerk prüfen": state.can_open_secondary_tools,
     }
