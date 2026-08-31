@@ -7,12 +7,14 @@ from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from cloud_failback import enable_cloud_failback
 from provider_registry import enable_provider_registry
+from control_center import enable_control_center
 
 
 enable_project_finder(App)
 enable_auto_update(App)
 enable_cloud_failback(App)
 enable_provider_registry(App)
+enable_control_center(App)
 
 
 def _show_already_running():
