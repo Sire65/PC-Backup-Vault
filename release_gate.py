@@ -12,7 +12,12 @@ class ReleaseGateResult:
 
 
 def evaluate_release_gate(*, ci_green: bool, required_modules: Mapping[str, bool], framework_version_resolved: bool, main_untouched: bool) -> ReleaseGateResult:
-    """Fail-closed release gate for a candidate build; it never performs a merge."""
+    """Fail-closed release gate for a candidate build; it never performs a merge.
+
+    `framework_version_resolved` means the source baseline is unambiguous. It does
+    not mean Framework Studio itself has completed every browser/device evidence
+    requirement. Those external Studio checks remain separate release evidence.
+    """
     reasons: list[str] = []
     if not ci_green:
         reasons.append("Gesamt-Regression/TÜV ist nicht grün.")
@@ -20,7 +25,7 @@ def evaluate_release_gate(*, ci_green: bool, required_modules: Mapping[str, bool
     if missing:
         reasons.append("Nicht vollständig verbunden: " + ", ".join(missing))
     if not framework_version_resolved:
-        reasons.append("Framework-Studio-Versionsstand 1.38.38/1.38.39 ist noch nicht eindeutig aufgelöst.")
+        reasons.append("Framework-Studio-Baseline ist nicht eindeutig aufgelöst.")
     if not main_untouched:
         reasons.append("Entwicklungsänderungen wurden bereits auf main übernommen; Freigabeprozess muss geprüft werden.")
     if reasons:
