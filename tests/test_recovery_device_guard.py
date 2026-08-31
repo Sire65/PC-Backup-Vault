@@ -1,7 +1,7 @@
 import unittest
 
 from nas_recovery.device_resolver import drive_letter_from_path, parse_disk_resolution
-from nas_recovery.target_guard import devices_are_distinct, recovery_target_is_safe
+from nas_recovery.target_guard import devices_are_distinct, image_target_disk_is_safe, recovery_target_is_safe
 
 
 class RecoveryDeviceGuardTests(unittest.TestCase):
@@ -10,6 +10,11 @@ class RecoveryDeviceGuardTests(unittest.TestCase):
         self.assertFalse(devices_are_distinct("disk-1", "disk-2", "disk-2"))
         self.assertTrue(devices_are_distinct("disk-1", "disk-2", "disk-3"))
         self.assertTrue(recovery_target_is_safe("SRC", "IMG", "OUT"))
+
+    def test_image_target_must_resolve_to_different_disk(self):
+        self.assertFalse(image_target_disk_is_safe(3, None))
+        self.assertFalse(image_target_disk_is_safe(3, 3))
+        self.assertTrue(image_target_disk_is_safe(3, 8))
 
     def test_drive_letter_parsing(self):
         self.assertEqual(drive_letter_from_path(r"D:\images\disk.img"), "D")
