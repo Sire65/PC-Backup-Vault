@@ -1,9 +1,15 @@
 name: Windows Release veröffentlichen
 
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - main
+    paths:
+      - 'config_store.py'
+      - 'installer/PC_Backup_Vault.iss'
+      - 'schema_core_jobs.sql'
+      - '.github/workflows/release-windows.yml'
 
 permissions:
   contents: write
@@ -21,52 +27,83 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Version gegen Tag prüfen
+      - name: Version konsolidieren
+        id: version
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag.TrimStart('v')
           $cfg = Get-Content config_store.py -Raw
           $iss = Get-Content installer/PC_Backup_Vault.iss -Raw
-          if ($cfg -notmatch ('APP_VERSION = "' + [regex]::Escape($version) + '"')) { throw "APP_VERSION passt nicht zum Release-Tag $tag" }
-          if ($iss -notmatch ('MyAppVersion "' + [regex]::Escape($version) + '"')) { throw "Installer-Version passt nicht zum Release-Tag $tag" }
+          $m = [regex]::Match($cfg, 'APP_VERSION\s*=\s*"([^"]+)"')
+          if (-not $m.Success) { throw "APP_VERSION konnte nicht gelesen werden." }
+          $version = $m.Groups[1].Value
+          if ($iss -notmatch ('MyAppVersion "' + [regex]::Escape($version) + '"')) { throw "Installer- und Programmversion sind nicht identisch." }
+          $tag = "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "Release-Kandidat: $tag"
+
+      - name: Vorhandenes Release prüfen
+        id: existing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            "exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Release $tag existiert bereits; kein erneutes Veröffentlichen."
+          } else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Release $tag ist neu und wird vollständig geprüft."
+          }
+          exit 0
 
       - name: Abhängigkeiten installieren
+        if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Regression
+      - name: Vollständige Regression
+        if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: |
-          python -m compileall -q app.py auto_updater.py update_ui.py project_finder
-          python -m unittest discover -s project_finder/tests -p "test_*.py"
-          python -m unittest discover -s tests -p "test_*.py"
+          python -m compileall -q .
+          python -m unittest discover -s project_finder/tests -p "test_*.py" -v
+          python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: PC Backup Vault bauen
+        if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." app.py
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
 
       - name: Inno Setup installieren
+        if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
       - name: Setup und SHA-256 erzeugen
+        if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+          $version = "${{ steps.version.outputs.version }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
           $setup = "installer\output\PC_Backup_Vault_${version}_Setup.exe"
           if (-not (Test-Path $setup)) { throw "Setup EXE wurde nicht erzeugt: $setup" }
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
           "$hash  PC_Backup_Vault_${version}_Setup.exe" | Set-Content -Encoding ascii ($setup + ".sha256")
+          Write-Host "SHA-256: $hash"
 
-      - name: GitHub Release veröffentlichen
+      - name: GitHub Release und Versions-Tag veröffentlichen
+        if: steps.existing.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           generate_release_notes: true

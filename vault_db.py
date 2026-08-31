@@ -1,9 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
+import json
 import psycopg
+from psycopg.types.json import Jsonb
 from status_bus import activity, state
 
 SCHEMA_FILE = Path(__file__).with_name("schema.sql")
+CORE_JOBS_SCHEMA_FILE = Path(__file__).with_name("schema_core_jobs.sql")
 
 def test_connection(dsn: str):
     try:
@@ -19,9 +22,11 @@ def test_connection(dsn: str):
 
 def initialize_schema(dsn: str):
     sql = SCHEMA_FILE.read_text(encoding="utf-8")
+    core_jobs_sql = CORE_JOBS_SCHEMA_FILE.read_text(encoding="utf-8")
     activity("neon", "schema")
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(sql)
+        conn.execute(core_jobs_sql)
 
 
 def database_size(dsn: str) -> int:
@@ -63,12 +68,20 @@ def schema_compatibility(dsn: str) -> dict:
         has_verification = bool(conn.execute(
             "SELECT to_regclass('backup_vault.backup_verifications') IS NOT NULL"
         ).fetchone()[0])
+        has_core_jobs = bool(conn.execute(
+            "SELECT to_regclass('backup_vault.core_jobs') IS NOT NULL"
+        ).fetchone()[0])
+        has_unified_jobs = bool(conn.execute(
+            "SELECT to_regclass('backup_vault.unified_jobs') IS NOT NULL"
+        ).fetchone()[0])
     missing = [c for c in _DASHBOARD_JOB_OPTIONAL_COLUMNS if c not in cols]
     return {
         "schema_version": str(core[0]) if core else "unbekannt",
         "app_min_version": str(core[1]) if core else "unbekannt",
         "missing_dashboard_columns": missing,
         "has_verification_table": has_verification,
+        "has_core_jobs": has_core_jobs,
+        "has_unified_jobs": has_unified_jobs,
         "legacy": bool(missing or not has_verification),
     }
 
@@ -101,6 +114,96 @@ def recent_jobs(dsn: str, limit: int = 100):
         sql = ("SELECT " + ", ".join(select_parts) +
                " FROM backup_vault.backup_jobs ORDER BY started_at DESC LIMIT %s")
         return conn.execute(sql, (limit,)).fetchall()
+
+
+def record_core_job(dsn: str, job: dict) -> str:
+    """Write one metadata-only control-plane job. Idempotent when source_job_id is supplied."""
+    activity("neon", "write")
+    metrics = dict(job.get("metrics") or {})
+    source_job_id = str(job.get("source_job_id") or "").strip() or None
+    status = str(job.get("status") or "SUCCESS").upper()
+    if status == "BLOCKED_LIMIT":
+        status = "BLOCKED"
+    params = (
+        str(job.get("program_name") or "PC Backup Vault"),
+        str(job.get("job_type") or "OTHER").upper(),
+        str(job.get("source") or "LOCAL").upper(),
+        source_job_id,
+        job.get("started_at"), job.get("finished_at"), status,
+        max(0, int(job.get("item_count") or 0)),
+        max(0, int(job.get("byte_count") or 0)),
+        max(0, int(job.get("warning_count") or 0)),
+        max(0, int(job.get("error_count") or 0)),
+        max(0.0, float(job.get("duration_seconds") or 0.0)),
+        str(job.get("summary") or ""), Jsonb(metrics),
+        str(job.get("app_version") or "") or None,
+        str(job.get("device_id") or "") or None,
+    )
+    sql = """
+      INSERT INTO backup_vault.core_jobs
+        (program_name,job_type,source,source_job_id,started_at,finished_at,status,
+         item_count,byte_count,warning_count,error_count,duration_seconds,summary,metrics,app_version,device_id)
+      VALUES (%s,%s,%s,%s,COALESCE(%s::timestamptz,now()),%s::timestamptz,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+      ON CONFLICT (source,source_job_id) WHERE source_job_id IS NOT NULL
+      DO UPDATE SET finished_at=EXCLUDED.finished_at,status=EXCLUDED.status,
+        item_count=EXCLUDED.item_count,byte_count=EXCLUDED.byte_count,
+        warning_count=EXCLUDED.warning_count,error_count=EXCLUDED.error_count,
+        duration_seconds=EXCLUDED.duration_seconds,summary=EXCLUDED.summary,
+        metrics=EXCLUDED.metrics,app_version=EXCLUDED.app_version,device_id=EXCLUDED.device_id
+      RETURNING id::text
+    """
+    with psycopg.connect(dsn) as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+        return str(row[0])
+
+
+def recent_unified_jobs(dsn: str, limit: int = 500) -> list[dict]:
+    """Return the common management view for backup, inventory, GitHub and future KC jobs."""
+    activity("neon", "read")
+    with psycopg.connect(dsn) as conn:
+        exists = bool(conn.execute(
+            "SELECT to_regclass('backup_vault.unified_jobs') IS NOT NULL"
+        ).fetchone()[0])
+        if not exists:
+            return []
+        rows = conn.execute("""
+          SELECT unified_id,program_name,job_type,source,source_job_id,started_at,finished_at,status,
+                 item_count,byte_count,warning_count,error_count,duration_seconds,summary,metrics,
+                 app_version,device_id,created_at
+          FROM backup_vault.unified_jobs
+          ORDER BY started_at DESC NULLS LAST
+          LIMIT %s
+        """, (max(1, int(limit)),)).fetchall()
+    keys = (
+        "unified_id","program_name","job_type","source","source_job_id","started_at","finished_at","status",
+        "item_count","byte_count","warning_count","error_count","duration_seconds","summary","metrics",
+        "app_version","device_id","created_at",
+    )
+    return [dict(zip(keys, row)) for row in rows]
+
+
+def unified_job_kpis(rows: list[dict]) -> dict:
+    counts_by_type: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("job_type") or "OTHER")
+        counts_by_type[key] = counts_by_type.get(key, 0) + 1
+    total = len(rows)
+    success = sum(1 for r in rows if r.get("status") == "SUCCESS")
+    failed = sum(1 for r in rows if r.get("status") == "FAILED")
+    warnings = sum(int(r.get("warning_count") or 0) for r in rows)
+    errors = sum(int(r.get("error_count") or 0) for r in rows)
+    return {
+        "runs": total,
+        "success": success,
+        "failed": failed,
+        "success_percent": round(success / total * 100.0, 1) if total else 0.0,
+        "warnings": warnings,
+        "errors": errors,
+        "items": sum(int(r.get("item_count") or 0) for r in rows),
+        "bytes": sum(int(r.get("byte_count") or 0) for r in rows),
+        "by_type": counts_by_type,
+    }
 
 
 def all_files(dsn: str, limit: int = 5000):
