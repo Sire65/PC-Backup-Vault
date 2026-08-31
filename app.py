@@ -7,7 +7,8 @@ from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from cloud_failback import enable_cloud_failback
 from provider_registry import enable_provider_registry
-from nas_recovery.ui import enable_nas_recovery
+from nas_recovery.ui import NasRecoveryWindow, enable_nas_recovery
+from nas_recovery.raid_ui_integration import enable_raid_workspace
 from control_center import enable_control_center
 from nas_recovery.control_center_bridge import enable_nas_control_center_bridge
 
@@ -16,6 +17,7 @@ enable_project_finder(App)
 enable_auto_update(App)
 enable_cloud_failback(App)
 enable_provider_registry(App)
+enable_raid_workspace(NasRecoveryWindow)
 enable_nas_recovery(App)
 enable_nas_control_center_bridge()
 enable_control_center(App)
