@@ -62,6 +62,7 @@ def apply_nas_button_states(window) -> NasUiState:
         "Read-only Lesetest (4 MiB)": state.can_use_disk_actions,
         "Image erstellen / fortsetzen": state.can_start_image,
         "…": state.can_use_disk_actions,
+        "0. Fehlende Festplatte suchen": state.can_open_secondary_tools,
         "3. RAID-Image-Analyse öffnen": state.can_open_secondary_tools,
         "4. NAS-Netzwerk prüfen": state.can_open_secondary_tools,
     }
@@ -125,8 +126,6 @@ def install_nas_ui_state_machine(window):
     window._run_worker = run_worker
     window.start_image = start_image
 
-    # Existing button command objects were bound before the wrappers above. Rebind
-    # only the image button, whose state flag matters for the cancel action.
     image_button = _button_by_text(window, "Image erstellen / fortsetzen")
     if image_button is not None:
         image_button.configure(command=window.start_image)
