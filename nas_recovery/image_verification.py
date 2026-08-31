@@ -5,6 +5,11 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+from typing import Callable
+
+
+class VerificationCancelled(RuntimeError):
+    """Raised when a long-running read-only image verification is cancelled."""
 
 
 @dataclass(frozen=True)
@@ -15,16 +20,32 @@ class ImageVerification:
     verified_at: str
 
 
-def verify_image(path: str | Path, chunk_size: int = 4 * 1024 * 1024) -> ImageVerification:
-    """Verify a recovery image read-only and return reproducible evidence."""
+def verify_image(
+    path: str | Path,
+    chunk_size: int = 4 * 1024 * 1024,
+    *,
+    progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> ImageVerification:
+    """Verify a recovery image read-only with optional progress/cancel callbacks."""
     image = Path(path)
     if not image.is_file():
         raise FileNotFoundError(str(image))
+    total = image.stat().st_size
     digest = hashlib.sha256()
+    done = 0
     with image.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(chunk_size), b""):
+        while True:
+            if should_cancel and should_cancel():
+                raise VerificationCancelled("Image-Verifikation wurde abgebrochen; das Image ist nicht als verifiziert markiert.")
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
             digest.update(chunk)
-    return ImageVerification(str(image.resolve()), image.stat().st_size, digest.hexdigest(), datetime.now(timezone.utc).isoformat())
+            done += len(chunk)
+            if progress:
+                progress(done, total)
+    return ImageVerification(str(image.resolve()), total, digest.hexdigest(), datetime.now(timezone.utc).isoformat())
 
 
 def write_manifest(verification: ImageVerification, destination: str | Path | None = None) -> Path:
