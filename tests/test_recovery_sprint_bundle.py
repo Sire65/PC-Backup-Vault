@@ -13,19 +13,19 @@ from nas_recovery.raid_virtual_plan import build_virtual_raid_plan
 
 
 class RecoverySprintBundleTests(unittest.TestCase):
-    def test_coordinator_requires_image_first_flow(self):
+    def test_coordinator_requires_image_first_flow_and_distinct_devices(self):
         with tempfile.TemporaryDirectory() as td:
             image = Path(td) / "disk.img"
             image.write_bytes(b"\0" * (1024 * 1024 + 4096))
             target = Path(td) / "recovered"
             c = RecoveryCoordinator()
-            c.identify_source("Disk 3", r"\\.\PhysicalDrive3", image.stat().st_size)
+            c.identify_source("Disk 3", r"\\.\PhysicalDrive3", image.stat().st_size, device_id="disk-3")
             c.mark_source_assessed()
-            c.attach_completed_image(image)
+            c.attach_completed_image(image, device_id="disk-8")
             self.assertFalse(c.ready_for_recovery_tool)
             c.verify_attached_image()
             c.analyze_verified_image()
-            c.select_recovery_target(target)
+            c.select_recovery_target(target, device_id="disk-9")
             self.assertTrue(c.ready_for_recovery_tool)
 
     def test_virtual_raid_rejects_physical_drive(self):
@@ -46,7 +46,11 @@ class RecoverySprintBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             image = Path(td) / "disk.img"; image.write_bytes(b"x")
             target = Path(td) / "out"; target.mkdir()
-            session = RecoverySession(image_path=str(image), image_complete=True, image_verified=True, analysis_complete=True, recovery_target=str(target))
+            session = RecoverySession(
+                image_path=str(image), image_complete=True, image_verified=True, analysis_complete=True,
+                recovery_target=str(target), source_device_id="disk-3", image_device_id="disk-8",
+                recovery_target_device_id="disk-9",
+            )
             handoff = build_engine_handoffs(session)[0]
             self.assertTrue(handoff.ready)
 
