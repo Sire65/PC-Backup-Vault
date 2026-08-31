@@ -14,13 +14,26 @@ from tkinter import ttk
 
 
 FRAMEWORK_PROVENANCE = {
-    "source_package": "FrameworkStudio_1_38_38 / candidate 1.38.39",
+    "studio_version": "1.38.39",
+    "source_package": "Framework Studio V1.38.39 / Migration Control Center Candidate",
+    "baseline_path": "BASELINE_V1_38_39",
+    "candidate_status": "YELLOW",
+    "candidate_note": "Browser- und Geräteevidenz vor Studio-Freigabe erforderlich.",
     "design_core": "master.design / DesignCore V1.0",
     "window_core": "master.window / WindowCore API v1",
     "table_core": "TableCore V1.0",
     "navigation_core": "NavigationCore V1.0",
-    "governance": "Framework Studio 2.0.1 Training/Governance Candidate",
+    "governance": "Framework Studio 2.0.1 Training/Governance Candidate (read-only governance input)",
 }
+
+
+def framework_studio_version_resolved() -> bool:
+    """Return whether the application has an unambiguous Framework Studio baseline.
+
+    This only resolves provenance. It does not promote a Studio candidate to GREEN
+    and does not bypass browser/device evidence required by Framework Studio itself.
+    """
+    return FRAMEWORK_PROVENANCE.get("studio_version") == "1.38.39" and FRAMEWORK_PROVENANCE.get("baseline_path") == "BASELINE_V1_38_39"
 
 
 @dataclass(frozen=True)
