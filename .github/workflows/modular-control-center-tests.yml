@@ -24,6 +24,7 @@ on:
       - 'tests/test_nas_image_verification.py'
       - 'tests/test_recovery_sprint_bundle.py'
       - 'tests/test_recovery_hardening_bundle.py'
+      - 'tests/test_recovery_device_guard.py'
       - '.github/workflows/modular-control-center-tests.yml'
   workflow_dispatch:
 
@@ -82,6 +83,9 @@ jobs:
       - name: Recovery hardening bundle tests
         shell: pwsh
         run: python -m unittest tests.test_recovery_hardening_bundle -v
+      - name: Recovery device guard tests
+        shell: pwsh
+        run: python -m unittest tests.test_recovery_device_guard -v
       - name: Existing cloud-cost tests
         shell: pwsh
         run: python -m unittest tests.test_cloud_failback -v
@@ -109,6 +113,9 @@ jobs:
           $handoff = Get-Content nas_recovery/engine_handoff.py -Raw
           $audit = Get-Content nas_recovery/recovery_audit.py -Raw
           $readiness = Get-Content nas_recovery/recovery_readiness.py -Raw
+          $targetGuard = Get-Content nas_recovery/target_guard.py -Raw
+          $resolver = Get-Content nas_recovery/device_resolver.py -Raw
+          $assistant = Get-Content nas_recovery/recovery_assistant_ui.py -Raw
           if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
@@ -136,3 +143,6 @@ jobs:
           if ($handoff -notmatch 'without passing disk/image arguments automatically') { throw 'external engine handoff safety marker missing' }
           if ($audit -notmatch 'without touching source media') { throw 'recovery audit no-source-write marker missing' }
           if ($readiness -notmatch 'without executing recovery actions') { throw 'recovery readiness execution guard missing' }
+          if ($targetGuard -notmatch 'Require every supplied device identity to be known and physically distinct') { throw 'physical target separation marker missing' }
+          if ($resolver -match 'Set-Disk|Initialize-Disk|Format-Volume|New-Partition|Remove-Partition') { throw 'device resolver contains mutating storage command' }
+          if ($assistant -notmatch 'blocked prerequisites stay disabled') { throw 'recovery assistant disabled-action marker missing' }
