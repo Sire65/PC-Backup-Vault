@@ -10,6 +10,7 @@ on:
       - 'framework_core_adapters.py'
       - 'requirements.txt'
       - 'nas_recovery/**'
+      - 'project_finder/**'
       - 'tests/test_control_center_architecture.py'
       - 'tests/test_nas_recovery_safety.py'
       - 'tests/test_nas_raid_analysis.py'
@@ -21,6 +22,7 @@ on:
       - 'tests/test_nas_inventory.py'
       - 'tests/test_nas_recovery_plan.py'
       - 'tests/test_nas_image_verification.py'
+      - 'tests/test_recovery_sprint_bundle.py'
       - '.github/workflows/modular-control-center-tests.yml'
   workflow_dispatch:
 
@@ -73,6 +75,9 @@ jobs:
       - name: Image verification tests
         shell: pwsh
         run: python -m unittest tests.test_nas_image_verification -v
+      - name: Five-sprint recovery bundle tests
+        shell: pwsh
+        run: python -m unittest tests.test_recovery_sprint_bundle -v
       - name: Existing cloud-cost tests
         shell: pwsh
         run: python -m unittest tests.test_cloud_failback -v
@@ -94,6 +99,9 @@ jobs:
           $inventoryUi = Get-Content nas_recovery/inventory_ui_integration.py -Raw
           $plan = Get-Content nas_recovery/recovery_plan.py -Raw
           $verify = Get-Content nas_recovery/image_verification.py -Raw
+          $coord = Get-Content nas_recovery/recovery_coordinator.py -Raw
+          $virtualRaid = Get-Content nas_recovery/raid_virtual_plan.py -Raw
+          $handoff = Get-Content nas_recovery/engine_handoff.py -Raw
           if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
@@ -115,3 +123,6 @@ jobs:
           if ($inventoryUi -notmatch 'successful read-only SSH report') { throw 'inventory view gating marker missing' }
           if ($plan -notmatch 'unavailable recovery actions are not executable') { throw 'recovery prerequisite gate missing' }
           if ($verify -notmatch 'Verify a recovery image read-only') { throw 'image verification read-only marker missing' }
+          if ($coord -notmatch 'never repairs or writes to an original disk') { throw 'recovery coordinator safety marker missing' }
+          if ($virtualRaid -notmatch 'never from PhysicalDrive paths') { throw 'virtual RAID image-only marker missing' }
+          if ($handoff -notmatch 'without passing disk/image arguments automatically') { throw 'external engine handoff safety marker missing' }
