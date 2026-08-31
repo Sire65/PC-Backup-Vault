@@ -1,6 +1,7 @@
 import unittest
 
 from function_catalog import visible_tasks
+from operation_progress import OperationProgressTracker, progress_text
 from release_gate import evaluate_release_gate
 from user_guidance import friendly_error, guidance_for_task
 
@@ -22,6 +23,24 @@ class ReleaseUsabilityBundleTests(unittest.TestCase):
         msg = friendly_error(RuntimeError("auth password failed"))
         self.assertIn("Anmeldung", msg)
         self.assertNotIn("auth password failed", msg)
+
+    def test_long_operations_report_percent_amount_runtime_eta_and_step(self):
+        tracker = OperationProgressTracker(started_at=100.0)
+        snap = tracker.snapshot(512, 1024, now=110.0, items_done=5, items_total=10, current_step="Prüfen")
+        text = progress_text(snap)
+        self.assertAlmostEqual(snap.percent, 50.0)
+        self.assertAlmostEqual(snap.eta_seconds, 10.0)
+        self.assertIn("50.0 %", text)
+        self.assertIn("5 / 10 Dateien", text)
+        self.assertIn("Laufzeit", text)
+        self.assertIn("Restzeit", text)
+        self.assertIn("Prüfen", text)
+
+    def test_unknown_total_never_invents_progress_or_eta(self):
+        tracker = OperationProgressTracker(started_at=100.0)
+        snap = tracker.snapshot(512, 0, now=110.0)
+        self.assertEqual(snap.percent, 0.0)
+        self.assertIsNone(snap.eta_seconds)
 
     def test_release_gate_fails_closed_until_all_prerequisites_green(self):
         blocked = evaluate_release_gate(
