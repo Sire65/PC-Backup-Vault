@@ -6,11 +6,13 @@ from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from cloud_failback import enable_cloud_failback
+from provider_registry import enable_provider_registry
 
 
 enable_project_finder(App)
 enable_auto_update(App)
 enable_cloud_failback(App)
+enable_provider_registry(App)
 
 
 def _show_already_running():
