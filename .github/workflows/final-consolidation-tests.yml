@@ -9,11 +9,19 @@ on:
       - 'framework_core_adapters.py'
       - 'function_catalog.py'
       - 'release_gate.py'
+      - 'vault_db.py'
+      - 'schema_core_jobs.sql'
+      - 'BUILD_EXE.bat'
       - 'nas_recovery/**'
+      - 'project_finder/**'
       - 'tests/test_final_consolidation.py'
       - 'tests/test_release_usability_bundle.py'
       - 'tests/test_recovery_hardening_bundle.py'
       - 'tests/test_recovery_device_guard.py'
+      - 'tests/test_core_jobs_packaging.py'
+      - 'tests/test_core_unified_jobs_schema.py'
+      - '.github/workflows/build-windows.yml'
+      - '.github/workflows/release-windows.yml'
       - '.github/workflows/final-consolidation-tests.yml'
   workflow_dispatch:
 
@@ -28,9 +36,11 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: python -m pip install -r requirements.txt
-      - name: Compile final gate
+      - name: Compile final gate and consolidated control plane
         shell: pwsh
-        run: python -m py_compile final_consolidation.py release_gate.py function_catalog.py framework_core_adapters.py
+        run: |
+          python -m py_compile final_consolidation.py release_gate.py function_catalog.py framework_core_adapters.py vault_db.py
+          python -m py_compile project_finder/core_job_bridge.py project_finder/core_jobs_dashboard.py project_finder/history_project_finder.py project_finder/inventory_github_dashboard.py project_finder/inventory_github_dashboard_model.py project_finder/inventory_history_dashboard.py project_finder/inventory_job_history.py project_finder/ui_workspace.py
       - name: Final consolidation contract tests
         shell: pwsh
         run: python -m unittest tests.test_final_consolidation -v
@@ -40,15 +50,27 @@ jobs:
       - name: Recovery hardening regression
         shell: pwsh
         run: python -m unittest tests.test_recovery_hardening_bundle tests.test_recovery_device_guard -v
+      - name: Unified Core job schema and packaging regression
+        shell: pwsh
+        run: python -m unittest tests.test_core_unified_jobs_schema tests.test_core_jobs_packaging -v
+      - name: Project Finder Core job regression
+        shell: pwsh
+        run: python -m unittest project_finder.tests.test_core_job_bridge project_finder.tests.test_inventory_github_dashboard_model project_finder.tests.test_inventory_job_history -v
       - name: Framework Studio and safety governance markers
         shell: pwsh
         run: |
           $gate = Get-Content final_consolidation.py -Raw
           $fa = Get-Content framework_core_adapters.py -Raw
           $arch = Get-Content ARCHITEKTUR_UND_REGELN.md -Raw
+          $build = Get-Content .github/workflows/build-windows.yml -Raw
+          $release = Get-Content .github/workflows/release-windows.yml -Raw
           if ($gate -notmatch 'Fail-closed final consolidation gate') { throw 'final consolidation fail-closed rule missing' }
           if ($gate -notmatch 'it never merges or mutates main') { throw 'main protection marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework Studio adapter governance missing' }
+          if ($fa -notmatch 'studio_version.*1.38.39') { throw 'Framework Studio 1.38.39 provenance missing' }
+          if ($fa -notmatch 'candidate_status.*YELLOW') { throw 'Framework Studio candidate evidence status missing' }
           if ($arch -notmatch 'Keine automatischen Hintergrund-Backups') { throw 'manual-backup architecture rule missing' }
           if ($arch -notmatch 'Pause/Fortsetzen und Abbrechen') { throw 'runtime control architecture rule missing' }
           if ($arch -notmatch 'Single-Instance') { throw 'single-instance architecture rule missing' }
+          if ($build -notmatch 'schema_core_jobs.sql') { throw 'Core job schema missing from Windows build' }
+          if ($release -notmatch 'schema_core_jobs.sql') { throw 'Core job schema missing from Windows release' }
