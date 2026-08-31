@@ -4,3 +4,4 @@ keyring>=25,<26
 matplotlib>=3.8,<4
 boto3>=1.35,<2
 qrcode>=8,<9
+paramiko>=4,<5
