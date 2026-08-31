@@ -7,8 +7,12 @@ from pathlib import Path
 from .recovery_plan import RecoveryPlanState
 
 
+RECOVERY_SESSION_SCHEMA = "pc-backup-vault.recovery-session.v1"
+
+
 @dataclass(frozen=True)
 class RecoverySession:
+    schema: str = RECOVERY_SESSION_SCHEMA
     source_label: str = ""
     source_device: str = ""
     source_size: int = 0
@@ -47,5 +51,9 @@ class RecoverySession:
     @classmethod
     def load(cls, path: str | Path) -> "RecoverySession":
         data = json.loads(Path(path).read_text(encoding="utf-8"))
+        schema = str(data.get("schema") or RECOVERY_SESSION_SCHEMA)
+        if schema != RECOVERY_SESSION_SCHEMA:
+            raise ValueError(f"Nicht unterstütztes Recovery-Session-Schema: {schema}")
         allowed = cls.__dataclass_fields__.keys()
+        data["schema"] = schema
         return cls(**{k: data[k] for k in allowed if k in data})
