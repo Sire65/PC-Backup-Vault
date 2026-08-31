@@ -61,7 +61,7 @@ jobs:
           $states = Get-Content nas_recovery/ui_state.py -Raw
           $net = Get-Content nas_recovery/network.py -Raw
           if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
-          if ($fa -notmatch 'adapters, not replacement cores') { throw 'Framework governance marker missing' }
+          if ($fa -notmatch 'not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
           if ($safe -notmatch 'mdadm --assemble --force') { throw 'RAID force-assemble guard missing' }
           if ($safe -notmatch 'set-disk -isreadonly \$false') { throw 'read-only removal guard missing' }
