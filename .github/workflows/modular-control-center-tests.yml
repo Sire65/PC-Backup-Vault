@@ -8,12 +8,15 @@ on:
       - 'app.py'
       - 'control_center.py'
       - 'function_catalog.py'
+      - 'user_guidance.py'
+      - 'release_gate.py'
       - 'framework_core_adapters.py'
       - 'requirements.txt'
       - 'nas_recovery/**'
       - 'project_finder/**'
       - 'tests/test_control_center_architecture.py'
       - 'tests/test_function_catalog.py'
+      - 'tests/test_release_usability_bundle.py'
       - 'tests/test_nas_recovery_safety.py'
       - 'tests/test_nas_raid_analysis.py'
       - 'tests/test_nas_ui_state.py'
@@ -44,7 +47,7 @@ jobs:
       - name: Compile integration
         shell: pwsh
         run: |
-          python -m py_compile app.py control_center.py function_catalog.py framework_core_adapters.py
+          python -m py_compile app.py control_center.py function_catalog.py user_guidance.py release_gate.py framework_core_adapters.py
           Get-ChildItem nas_recovery -Filter *.py | ForEach-Object { python -m py_compile $_.FullName }
       - name: Architecture tests
         shell: pwsh
@@ -52,6 +55,9 @@ jobs:
       - name: Leitstand usability catalog tests
         shell: pwsh
         run: python -m unittest tests.test_function_catalog -v
+      - name: Final usability and release gate tests
+        shell: pwsh
+        run: python -m unittest tests.test_release_usability_bundle -v
       - name: NAS recovery safety tests
         shell: pwsh
         run: python -m unittest tests.test_nas_recovery_safety -v
@@ -94,11 +100,13 @@ jobs:
       - name: Existing cloud-cost tests
         shell: pwsh
         run: python -m unittest tests.test_cloud_failback -v
-      - name: Safety markers
+      - name: Safety and usability markers
         shell: pwsh
         run: |
           $cc = Get-Content control_center.py -Raw
           $catalog = Get-Content function_catalog.py -Raw
+          $guidance = Get-Content user_guidance.py -Raw
+          $release = Get-Content release_gate.py -Raw
           $fa = Get-Content framework_core_adapters.py -Raw
           $safe = Get-Content nas_recovery/safety.py -Raw
           $svc = Get-Content nas_recovery/service.py -Raw
@@ -122,9 +130,10 @@ jobs:
           $targetGuard = Get-Content nas_recovery/target_guard.py -Raw
           $resolver = Get-Content nas_recovery/device_resolver.py -Raw
           $assistant = Get-Content nas_recovery/recovery_assistant_ui.py -Raw
-          if ($cc -notmatch 'Was möchten Sie tun') { throw 'task-oriented Leitstand quick start missing' }
+          if ($cc -notmatch 'Was möchten Sie erledigen') { throw 'task-oriented Leitstand missing' }
           if ($catalog -notmatch 'Simple mode keeps technical functions out of the primary decision path') { throw 'simple-mode catalog marker missing' }
-          if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
+          if ($guidance -notmatch 'friendly_error') { throw 'plain-language error adapter missing' }
+          if ($release -notmatch 'it never performs a merge') { throw 'release gate no-merge marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
           if ($safe -notmatch 'mdadm --assemble --force') { throw 'RAID force-assemble guard missing' }
@@ -154,3 +163,4 @@ jobs:
           if ($targetGuard -notmatch 'Require every supplied device identity to be known and physically distinct') { throw 'physical target separation marker missing' }
           if ($resolver -match 'Set-Disk|Initialize-Disk|Format-Volume|New-Partition|Remove-Partition') { throw 'device resolver contains mutating storage command' }
           if ($assistant -notmatch 'blocked prerequisites stay disabled') { throw 'recovery assistant disabled-action marker missing' }
+          if ($assistant -notmatch 'Nächster Schritt') { throw 'recovery assistant next-step navigation missing' }
