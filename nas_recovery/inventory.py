@@ -24,6 +24,14 @@ class UsageEntry:
 
 
 @dataclass(frozen=True)
+class RecoveryAreaAssessment:
+    path: str
+    category: str
+    label: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class NasStorageInventory:
     mounts: tuple[MountEntry, ...]
     usage: tuple[UsageEntry, ...]
@@ -44,7 +52,7 @@ def parse_mount_output(text: str) -> tuple[MountEntry, ...]:
 
 
 def parse_df_output(text: str) -> tuple[UsageEntry, ...]:
-    """Parse `df -h` output conservatively, tolerating wrapped/old NAS formats."""
+    """Parse standard one-line `df -h` rows conservatively."""
     result: list[UsageEntry] = []
     for raw in str(text or "").splitlines():
         line = raw.strip()
@@ -57,17 +65,34 @@ def parse_df_output(text: str) -> tuple[UsageEntry, ...]:
     return tuple(result)
 
 
+def _path_is_or_below(path: str, root: str) -> bool:
+    clean = "/" + str(path or "").strip().strip("/")
+    root_clean = "/" + str(root or "").strip().strip("/")
+    return clean == root_clean or clean.startswith(root_clean + "/")
+
+
 def _likely_data_mount(target: str) -> bool:
-    clean = str(target or "").rstrip("/") or "/"
-    prefixes = ("/mnt/", "/media/", "/shares/", "/share/", "/volume", "/data", "/raid", "/nfs/")
-    return any(clean == p.rstrip("/") or clean.startswith(p) for p in prefixes)
+    clean = str(target or "").strip() or "/"
+    roots = ("/mnt", "/media", "/shares", "/share", "/volume", "/data", "/raid", "/nfs")
+    return any(_path_is_or_below(clean, root) for root in roots)
+
+
+def classify_recovery_area(path: str, fs_type: str = "", source: str = "") -> RecoveryAreaAssessment:
+    """Heuristic classification only; it never grants write permission or starts recovery."""
+    clean = str(path or "").strip() or "/"
+    system_roots = ("/", "/boot", "/proc", "/sys", "/dev", "/run", "/etc", "/var", "/usr", "/bin", "/sbin", "/lib", "/lib64")
+    if clean == "/" or any(_path_is_or_below(clean, root) for root in system_roots[1:]):
+        return RecoveryAreaAssessment(clean, "system", "System – nicht für Recovery auswählen", "typischer Betriebssystem-/Laufzeitbereich")
+    if _likely_data_mount(clean):
+        return RecoveryAreaAssessment(clean, "data", "Daten – Recovery-Kandidat", "typischer NAS-Datenpfad; vor Auswahl trotzdem prüfen")
+    return RecoveryAreaAssessment(clean, "review", "Unklar – erst prüfen", "Pfad ist weder eindeutig System noch typischer Datenbereich")
 
 
 def build_storage_inventory(mount_text: str, df_text: str) -> NasStorageInventory:
     mounts = parse_mount_output(mount_text)
     usage = parse_df_output(df_text)
-    candidates = {m.target for m in mounts if _likely_data_mount(m.target)}
-    candidates.update(u.mountpoint for u in usage if _likely_data_mount(u.mountpoint))
+    candidates = {m.target for m in mounts if classify_recovery_area(m.target, m.fs_type, m.source).category == "data"}
+    candidates.update(u.mountpoint for u in usage if classify_recovery_area(u.mountpoint, source=u.filesystem).category == "data")
     return NasStorageInventory(mounts, usage, tuple(sorted(candidates)))
 
 
