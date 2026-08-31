@@ -35,6 +35,15 @@ class ImageVerificationTests(unittest.TestCase):
             self.assertTrue(seen)
             self.assertEqual(seen[-1], (10000, 10000))
 
+    def test_known_source_size_rejects_incomplete_image(self):
+        with tempfile.TemporaryDirectory() as td:
+            image = Path(td) / "disk.img"
+            image.write_bytes(b"x" * 9000)
+            c = RecoveryCoordinator(RecoverySession(source_identified=True, source_assessed=True, source_size=10000))
+            with self.assertRaises(ValueError):
+                c.attach_completed_image(image, device_id="disk-8")
+            self.assertFalse(c.session.image_complete)
+
     def test_cancelled_verification_never_marks_session_verified(self):
         with tempfile.TemporaryDirectory() as td:
             image = Path(td) / "disk.img"
