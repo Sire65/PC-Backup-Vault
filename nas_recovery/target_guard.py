@@ -29,3 +29,10 @@ def devices_are_distinct(*identities: str) -> bool:
 def recovery_target_is_safe(source_device_id: str, image_device_id: str, recovery_target_device_id: str) -> bool:
     """Recovery requires a third known device, distinct from source and image target."""
     return devices_are_distinct(source_device_id, image_device_id, recovery_target_device_id)
+
+
+def image_target_disk_is_safe(source_disk_number: int, target_disk_number: int | None) -> bool:
+    """Fail closed unless the image target is resolved to a different physical disk."""
+    if target_disk_number is None:
+        return False
+    return int(source_disk_number) != int(target_disk_number)
