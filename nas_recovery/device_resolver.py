@@ -26,6 +26,11 @@ def drive_letter_from_path(path: str | Path) -> str:
     return match.group(1).upper() if match else ""
 
 
+def canonical_disk_id(disk_number: int) -> str:
+    """Use one local-session identity namespace for source, image storage and recovery target."""
+    return f"disk-number:{int(disk_number)}"
+
+
 def parse_disk_resolution(path: str | Path, output: str) -> PathDeviceResolution:
     drive = drive_letter_from_path(path)
     if not drive:
@@ -33,10 +38,9 @@ def parse_disk_resolution(path: str | Path, output: str) -> PathDeviceResolution
     try:
         data = json.loads(str(output or "").strip())
         number = int(data.get("DiskNumber"))
-        unique = str(data.get("UniqueId") or "").strip()
     except Exception:
         return PathDeviceResolution(str(path), drive, None, "", False, "Datenträgerzuordnung konnte nicht eindeutig gelesen werden.")
-    device_id = unique or f"disk-number:{number}"
+    device_id = canonical_disk_id(number)
     return PathDeviceResolution(str(path), drive, number, device_id, True, "Windows-Datenträger read-only zugeordnet.")
 
 
