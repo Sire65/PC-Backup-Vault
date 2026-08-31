@@ -7,11 +7,13 @@ on:
     paths:
       - 'app.py'
       - 'control_center.py'
+      - 'function_catalog.py'
       - 'framework_core_adapters.py'
       - 'requirements.txt'
       - 'nas_recovery/**'
       - 'project_finder/**'
       - 'tests/test_control_center_architecture.py'
+      - 'tests/test_function_catalog.py'
       - 'tests/test_nas_recovery_safety.py'
       - 'tests/test_nas_raid_analysis.py'
       - 'tests/test_nas_ui_state.py'
@@ -42,11 +44,14 @@ jobs:
       - name: Compile integration
         shell: pwsh
         run: |
-          python -m py_compile app.py control_center.py framework_core_adapters.py
+          python -m py_compile app.py control_center.py function_catalog.py framework_core_adapters.py
           Get-ChildItem nas_recovery -Filter *.py | ForEach-Object { python -m py_compile $_.FullName }
       - name: Architecture tests
         shell: pwsh
         run: python -m unittest tests.test_control_center_architecture -v
+      - name: Leitstand usability catalog tests
+        shell: pwsh
+        run: python -m unittest tests.test_function_catalog -v
       - name: NAS recovery safety tests
         shell: pwsh
         run: python -m unittest tests.test_nas_recovery_safety -v
@@ -93,6 +98,7 @@ jobs:
         shell: pwsh
         run: |
           $cc = Get-Content control_center.py -Raw
+          $catalog = Get-Content function_catalog.py -Raw
           $fa = Get-Content framework_core_adapters.py -Raw
           $safe = Get-Content nas_recovery/safety.py -Raw
           $svc = Get-Content nas_recovery/service.py -Raw
@@ -116,6 +122,8 @@ jobs:
           $targetGuard = Get-Content nas_recovery/target_guard.py -Raw
           $resolver = Get-Content nas_recovery/device_resolver.py -Raw
           $assistant = Get-Content nas_recovery/recovery_assistant_ui.py -Raw
+          if ($cc -notmatch 'Was möchten Sie tun') { throw 'task-oriented Leitstand quick start missing' }
+          if ($catalog -notmatch 'Simple mode keeps technical functions out of the primary decision path') { throw 'simple-mode catalog marker missing' }
           if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
