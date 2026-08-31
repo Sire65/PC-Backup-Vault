@@ -8,6 +8,7 @@ on:
       - 'app.py'
       - 'control_center.py'
       - 'framework_core_adapters.py'
+      - 'requirements.txt'
       - 'nas_recovery/**'
       - 'tests/test_control_center_architecture.py'
       - 'tests/test_nas_recovery_safety.py'
@@ -15,6 +16,7 @@ on:
       - 'tests/test_nas_ui_state.py'
       - 'tests/test_nas_network.py'
       - 'tests/test_missing_disk_detector.py'
+      - 'tests/test_nas_ssh_readonly.py'
       - '.github/workflows/modular-control-center-tests.yml'
   workflow_dispatch:
 
@@ -31,7 +33,7 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile integration
         shell: pwsh
-        run: python -m py_compile app.py control_center.py framework_core_adapters.py nas_recovery/__init__.py nas_recovery/safety.py nas_recovery/service.py nas_recovery/ui.py nas_recovery/ui_state.py nas_recovery/missing_disk.py nas_recovery/missing_disk_ui.py nas_recovery/network.py nas_recovery/network_ui.py nas_recovery/workflow_ui.py nas_recovery/raid_analysis.py nas_recovery/recovery_engines.py nas_recovery/raid_workspace.py nas_recovery/raid_ui_integration.py
+        run: python -m py_compile app.py control_center.py framework_core_adapters.py nas_recovery/__init__.py nas_recovery/safety.py nas_recovery/service.py nas_recovery/ui.py nas_recovery/ui_state.py nas_recovery/missing_disk.py nas_recovery/missing_disk_ui.py nas_recovery/network.py nas_recovery/network_ui.py nas_recovery/ssh_readonly.py nas_recovery/workflow_ui.py nas_recovery/raid_analysis.py nas_recovery/recovery_engines.py nas_recovery/raid_workspace.py nas_recovery/raid_ui_integration.py
       - name: Architecture tests
         shell: pwsh
         run: python -m unittest tests.test_control_center_architecture -v
@@ -50,6 +52,9 @@ jobs:
       - name: Missing disk detector tests
         shell: pwsh
         run: python -m unittest tests.test_missing_disk_detector -v
+      - name: SSH read-only safety tests
+        shell: pwsh
+        run: python -m unittest tests.test_nas_ssh_readonly -v
       - name: Existing cloud-cost tests
         shell: pwsh
         run: python -m unittest tests.test_cloud_failback -v
@@ -65,6 +70,7 @@ jobs:
           $states = Get-Content nas_recovery/ui_state.py -Raw
           $net = Get-Content nas_recovery/network.py -Raw
           $missing = Get-Content nas_recovery/missing_disk.py -Raw
+          $ssh = Get-Content nas_recovery/ssh_readonly.py -Raw
           if ($cc -notmatch 'NAS Migration Studio v5.6') { throw 'NAS integration marker missing' }
           if ($fa -notmatch 'adapters.*, not replacement cores') { throw 'Framework governance marker missing' }
           if ($fa -notmatch 'Escape affects only the topmost closable context') { throw 'WindowCore Escape rule missing' }
@@ -77,3 +83,5 @@ jobs:
           if ($states -notmatch 'unavailable actions are not') { throw 'disabled-action governance marker missing' }
           if ($net -match 'subprocess|powershell|os.system') { throw 'network diagnostics must not execute configuration commands' }
           if ($missing -match 'Initialize-Disk|Format-Volume|Set-Disk|Set-Partition|New-Partition|Remove-Partition') { throw 'missing-disk detector contains a mutating storage command' }
+          if ($ssh -notmatch 'exact read-only command whitelist') { throw 'SSH whitelist marker missing' }
+          if ($ssh -match 'rm -rf|touch /tmp|reboot|shutdown -h|fsck -y|remount,rw') { throw 'SSH service contains a mutating command' }
