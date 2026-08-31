@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+import paramiko
+
 
 class UnsafeSshCommand(ValueError):
     pass
@@ -56,10 +58,10 @@ def _fingerprint_sha256(key) -> str:
     return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
 
 
-class _SessionOnlyHostKeyPolicy:
-    """Accept an unknown host key for this one diagnostic session only.
+class _SessionOnlyHostKeyPolicy(paramiko.MissingHostKeyPolicy):
+    """Accept an unknown host key for this diagnostic session only.
 
-    The fingerprint is surfaced to the UI/report. Nothing is written to known_hosts.
+    The fingerprint is surfaced to the UI/report. Nothing is persisted to known_hosts.
     """
 
     def __init__(self):
@@ -87,10 +89,7 @@ class SshReadOnlyDiagnostics:
         *,
         port: int = 22,
         commands: Iterable[tuple[str, str]] = READ_ONLY_COMMANDS,
-        allow_legacy_dss: bool = False,
     ) -> SshReadOnlyReport:
-        import paramiko
-
         clean_host = str(host or "").strip()
         clean_user = str(username or "").strip()
         if not clean_host:
@@ -104,12 +103,6 @@ class SshReadOnlyDiagnostics:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(policy)
 
-        disabled_algorithms = None
-        if allow_legacy_dss:
-            # Paramiko versions that still support ssh-dss may use it for this
-            # single legacy session. Nothing is enabled globally.
-            disabled_algorithms = {}
-
         try:
             client.connect(
                 hostname=clean_host,
@@ -121,7 +114,6 @@ class SshReadOnlyDiagnostics:
                 auth_timeout=self.connect_timeout,
                 look_for_keys=False,
                 allow_agent=False,
-                disabled_algorithms=disabled_algorithms,
             )
             results: list[SshCommandResult] = []
             for title, raw_command in tuple(commands):
