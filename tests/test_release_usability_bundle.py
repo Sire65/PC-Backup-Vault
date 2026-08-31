@@ -1,5 +1,6 @@
 import unittest
 
+from framework_core_adapters import FRAMEWORK_PROVENANCE, framework_studio_version_resolved
 from function_catalog import visible_tasks
 from operation_progress import OperationProgressTracker, progress_text
 from release_gate import evaluate_release_gate
@@ -42,6 +43,12 @@ class ReleaseUsabilityBundleTests(unittest.TestCase):
         self.assertEqual(snap.percent, 0.0)
         self.assertIsNone(snap.eta_seconds)
 
+    def test_framework_studio_baseline_is_unambiguous_but_stays_candidate(self):
+        self.assertTrue(framework_studio_version_resolved())
+        self.assertEqual(FRAMEWORK_PROVENANCE["studio_version"], "1.38.39")
+        self.assertEqual(FRAMEWORK_PROVENANCE["baseline_path"], "BASELINE_V1_38_39")
+        self.assertEqual(FRAMEWORK_PROVENANCE["candidate_status"], "YELLOW")
+
     def test_release_gate_fails_closed_until_all_prerequisites_green(self):
         blocked = evaluate_release_gate(
             ci_green=True,
@@ -56,7 +63,7 @@ class ReleaseUsabilityBundleTests(unittest.TestCase):
         ready = evaluate_release_gate(
             ci_green=True,
             required_modules={"backup": True, "nas": True, "restore": True},
-            framework_version_resolved=True,
+            framework_version_resolved=framework_studio_version_resolved(),
             main_untouched=True,
         )
         self.assertTrue(ready.ready)
