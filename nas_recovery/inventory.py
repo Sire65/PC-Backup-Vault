@@ -73,8 +73,12 @@ def _path_is_or_below(path: str, root: str) -> bool:
 
 def _likely_data_mount(target: str) -> bool:
     clean = str(target or "").strip() or "/"
-    roots = ("/mnt", "/media", "/shares", "/share", "/volume", "/data", "/raid", "/nfs")
-    return any(_path_is_or_below(clean, root) for root in roots)
+    roots = ("/mnt", "/media", "/shares", "/share", "/data", "/raid", "/nfs")
+    if any(_path_is_or_below(clean, root) for root in roots):
+        return True
+    # Synology/QNAP-like numbered volume roots must match /volume1, /volume2, ...
+    # without accidentally accepting unrelated paths such as /volumebad.
+    return bool(re.match(r"^/volume\d+(?:/|$)", clean, flags=re.IGNORECASE))
 
 
 def classify_recovery_area(path: str, fs_type: str = "", source: str = "") -> RecoveryAreaAssessment:
