@@ -10,7 +10,7 @@ from framework_core_adapters import (
     configure_table,
     normalize_window_geometry,
 )
-from .inventory import NasStorageInventory, inventory_from_ssh_report
+from .inventory import NasStorageInventory, classify_recovery_area, inventory_from_ssh_report
 
 
 class NasInventoryWindow(tk.Toplevel):
@@ -23,9 +23,24 @@ class NasInventoryWindow(tk.Toplevel):
         self.title("PC Backup Vault – NAS Datenstruktur")
         self.configure(bg=TOKENS.bg)
         apply_design_adapter(self)
-        normalize_window_geometry(self, 1100, 760, 900, 620)
+        normalize_window_geometry(self, 1180, 780, 920, 640)
         bind_window_escape(self, self.destroy)
         self._build()
+
+    def _tree_with_scrollbars(self, parent, columns):
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True)
+        tree = ttk.Treeview(frame, height=12)
+        configure_table(tree, columns)
+        sy = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        sx = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        sy.grid(row=0, column=1, sticky="ns")
+        sx.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        return tree
 
     def _build(self):
         header = ttk.Frame(self, style="Surface.TFrame", padding=(18, 13))
@@ -51,10 +66,16 @@ class NasInventoryWindow(tk.Toplevel):
             f"wahrscheinliche Datenbereiche: {likely}"
         )
         ttk.Label(summary, text=text, style="Section.TLabel").pack(anchor="w")
-        hint = (
-            "Datenbereiche wurden anhand typischer NAS-Pfade markiert. Noch wird nichts kopiert, repariert, gemountet oder verändert."
-        )
-        ttk.Label(summary, text=hint, style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(
+            summary,
+            text=(
+                "Die Einstufung ist nur eine Heuristik. 'RW' zeigt ausschließlich den beobachteten Mount-Status auf dem NAS. "
+                "PC Backup Vault erhält dadurch keinerlei Schreibfreigabe und arbeitet in diesem Bereich weiterhin read-only."
+            ),
+            style="Muted.TLabel",
+            wraplength=1100,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
         notebook = ttk.Notebook(body)
         notebook.pack(fill="both", expand=True, pady=(10, 0))
@@ -66,60 +87,58 @@ class NasInventoryWindow(tk.Toplevel):
         notebook.add(usage_tab, text="Speicherbelegung")
         notebook.add(mount_tab, text="Mountpoints")
 
-        self.data_tree = ttk.Treeview(data_tab, height=12)
-        configure_table(self.data_tree, [
-            ("path", "Pfad", 420, "w"),
-            ("size", "Größe", 110, "e"),
-            ("used", "Belegt", 110, "e"),
-            ("free", "Frei", 110, "e"),
-            ("percent", "Belegt %", 90, "center"),
-            ("mode", "Mount", 100, "center"),
+        self.data_tree = self._tree_with_scrollbars(data_tab, [
+            ("path", "Pfad", 300, "w"),
+            ("class", "Einstufung", 245, "w"),
+            ("size", "Größe", 95, "e"),
+            ("used", "Belegt", 95, "e"),
+            ("free", "Frei", 95, "e"),
+            ("percent", "Belegt %", 80, "center"),
+            ("mode", "NAS-Mount", 110, "center"),
         ])
-        self.data_tree.pack(fill="both", expand=True)
 
         usage_by_mount = {u.mountpoint: u for u in self.inventory.usage}
         mount_by_target = {m.target: m for m in self.inventory.mounts}
-        for path in self.inventory.likely_data_mounts:
+        all_paths = sorted(set(usage_by_mount) | set(mount_by_target))
+        for path in all_paths:
             usage = usage_by_mount.get(path)
             mount = mount_by_target.get(path)
+            assessment = classify_recovery_area(path, mount.fs_type if mount else "", mount.source if mount else (usage.filesystem if usage else ""))
             self.data_tree.insert("", "end", values=(
                 path,
+                assessment.label,
                 usage.size if usage else "–",
                 usage.used if usage else "–",
                 usage.available if usage else "–",
                 usage.percent if usage else "–",
-                ("nur lesen" if mount and mount.read_only else "rw/unklar" if mount else "unbekannt"),
+                ("RO beobachtet" if mount and mount.read_only else "RW beobachtet" if mount else "unbekannt"),
             ))
 
-        self.usage_tree = ttk.Treeview(usage_tab, height=12)
-        configure_table(self.usage_tree, [
+        self.usage_tree = self._tree_with_scrollbars(usage_tab, [
             ("fs", "Dateisystem/Device", 260, "w"),
             ("size", "Größe", 100, "e"),
             ("used", "Belegt", 100, "e"),
             ("free", "Frei", 100, "e"),
             ("percent", "Belegt %", 90, "center"),
-            ("mount", "Mountpoint", 330, "w"),
+            ("mount", "Mountpoint", 360, "w"),
         ])
-        self.usage_tree.pack(fill="both", expand=True)
         for u in self.inventory.usage:
             self.usage_tree.insert("", "end", values=(u.filesystem, u.size, u.used, u.available, u.percent, u.mountpoint))
 
-        self.mount_tree = ttk.Treeview(mount_tab, height=12)
-        configure_table(self.mount_tree, [
+        self.mount_tree = self._tree_with_scrollbars(mount_tab, [
             ("source", "Quelle", 260, "w"),
             ("target", "Ziel", 330, "w"),
             ("type", "Typ", 110, "w"),
-            ("mode", "Modus", 100, "center"),
-            ("opts", "Optionen", 260, "w"),
+            ("mode", "NAS-Mount", 120, "center"),
+            ("opts", "Optionen", 300, "w"),
         ])
-        self.mount_tree.pack(fill="both", expand=True)
         for m in self.inventory.mounts:
-            self.mount_tree.insert("", "end", values=(m.source, m.target, m.fs_type, "RO" if m.read_only else "RW", m.options))
+            self.mount_tree.insert("", "end", values=(m.source, m.target, m.fs_type, "RO beobachtet" if m.read_only else "RW beobachtet", m.options))
 
         footer = ttk.Frame(self, style="Surface.TFrame", padding=(16, 8))
         footer.pack(fill="x")
         ttk.Label(
             footer,
-            text="Nächster Schritt: einen Datenbereich bewusst auswählen und ausschließlich für Image/Recovery vorbereiten.",
+            text="System = nicht auswählen · Daten = Recovery-Kandidat · Unklar = zuerst prüfen. Keine Kategorie erlaubt Schreibzugriff auf das NAS.",
             style="Muted.TLabel",
         ).pack(side="left")
