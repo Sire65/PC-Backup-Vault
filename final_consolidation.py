@@ -45,7 +45,7 @@ def evaluate_final_consolidation(
         (regression_green, "REGRESSION", "Regression ist nicht vollständig grün."),
         (safety_green, "SAFETY", "Sicherheits-/Recovery-Prüfungen sind nicht vollständig grün."),
         (studio_rules_green, "STUDIO", "Framework-Studio/Vorgaben/Regeln sind nicht vollständig bestätigt."),
-        (framework_version_resolved, "FRAMEWORK_VERSION", "Framework-Studio-Version 1.38.38/1.38.39 ist noch nicht formal geklärt."),
+        (framework_version_resolved, "FRAMEWORK_VERSION", "Framework-Studio-Baseline ist noch nicht formal eindeutig geklärt."),
         (main_untouched, "MAIN", "main wurde vor der finalen Freigabe verändert."),
     )
     for ok, code, message in checks:
