@@ -3,17 +3,16 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox
 from dataclasses import dataclass
-from typing import Callable
 
 from framework_core_adapters import (
     TOKENS,
-    FRAMEWORK_PROVENANCE,
     apply_design_adapter,
     bind_window_escape,
     configure_table,
     normalize_window_geometry,
     status_color,
 )
+from function_catalog import visible_tasks
 
 
 @dataclass(frozen=True)
@@ -48,7 +47,7 @@ class ControlCenterWindow(tk.Toplevel):
         self.title("PC Backup Vault – Leitstand")
         self.configure(bg=TOKENS.bg)
         apply_design_adapter(self)
-        normalize_window_geometry(self, 1280, 820, 1020, 680)
+        normalize_window_geometry(self, 1280, 900, 1020, 720)
         bind_window_escape(self, self._minimize_to_host)
         self.protocol("WM_DELETE_WINDOW", self._minimize_to_host)
         self._build()
@@ -61,6 +60,9 @@ class ControlCenterWindow(tk.Toplevel):
             self.app.lift()
         except Exception:
             self.destroy()
+
+    def _module(self, module_id: str) -> ModuleSpec | None:
+        return next((spec for spec in MODULES if spec.module_id == module_id), None)
 
     def _build(self):
         header = ttk.Frame(self, style="Surface.TFrame", padding=(18, 14))
@@ -80,6 +82,26 @@ class ControlCenterWindow(tk.Toplevel):
         self.alert_text = tk.Label(self.alert, text="Systemzustand wird geprüft …", bg="#e2e8f0", fg=TOKENS.text, font=(TOKENS.font_family, 9, "bold"))
         self.alert_text.pack(side="left")
 
+        quick = ttk.LabelFrame(self, text="Was möchten Sie tun?", padding=10)
+        quick.pack(fill="x", padx=16, pady=(0, 8))
+        quick.columnconfigure(0, weight=1)
+        quick.columnconfigure(1, weight=1)
+        quick.columnconfigure(2, weight=1)
+        for idx, task in enumerate(visible_tasks(advanced=False)):
+            button = ttk.Button(
+                quick,
+                text=f"{task.title}\n{task.question}",
+                command=lambda t=task: self.open_task(t.module_id),
+            )
+            button.grid(row=idx // 3, column=idx % 3, sticky="ew", padx=4, pady=4, ipady=5)
+        ttk.Label(
+            quick,
+            text="Die häufigsten Aufgaben stehen hier zuerst. Technische Einzelwerkzeuge bleiben darunter verfügbar, müssen aber für normale Arbeit nicht verstanden werden.",
+            style="Muted.TLabel",
+            wraplength=1160,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=4, pady=(5, 0))
+
         body = ttk.Frame(self, style="Vault.TFrame", padding=(16, 2, 16, 14))
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=3)
@@ -88,7 +110,7 @@ class ControlCenterWindow(tk.Toplevel):
 
         modules_box = ttk.Frame(body, style="Vault.TFrame")
         modules_box.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        ttk.Label(modules_box, text="Module", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(modules_box, text="Alle Bereiche · für Details und Sonderfälle", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
         grid = ttk.Frame(modules_box, style="Vault.TFrame")
         grid.pack(fill="both", expand=True)
         for col in range(3):
@@ -132,14 +154,21 @@ class ControlCenterWindow(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         sy.pack(side="right", fill="y")
 
-        gov = ttk.LabelFrame(side, text="Framework-Governance", padding=10)
+        gov = ttk.LabelFrame(side, text="Technik / Framework", padding=10)
         gov.pack(fill="x", pady=(10, 0))
         self.gov_label = ttk.Label(gov, style="Muted.TLabel", wraplength=430, justify="left")
         self.gov_label.pack(anchor="w")
         self.gov_label.configure(text=(
-            "UI-Verträge: DesignCore · WindowCore · TableCore · NavigationCore. "
+            "Für die normale Bedienung nicht erforderlich. UI-Verträge: DesignCore · WindowCore · TableCore · NavigationCore. "
             "Tkinter nutzt Adapter; Fachlogik bleibt in den Modulen."
         ))
+
+    def open_task(self, module_id: str):
+        spec = self._module(module_id)
+        if spec is None:
+            messagebox.showwarning("Schnellstart", "Diese Aufgabe ist noch keinem Bereich zugeordnet.", parent=self)
+            return
+        self.open_module(spec)
 
     def _status_snapshot(self):
         rows = []
@@ -179,7 +208,6 @@ class ControlCenterWindow(tk.Toplevel):
             elif normalized == "WARNUNG": warnings += 1
             self.tree.insert("", "end", values=(label, normalized, detail or "Keine Detailmeldung"))
 
-        # Module readiness is explicit and never pretends unfinished integrations are ready.
         for spec in MODULES:
             dot, dot_id, state = self.module_widgets[spec.module_id]
             if spec.readiness == "integration":
@@ -243,7 +271,6 @@ def enable_control_center(AppClass):
     def wrapped_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self.open_control_center = lambda: open_control_center(self)
-        # Leitstand is the default front door, while the proven legacy host remains intact behind it.
         self.after(450, self.open_control_center)
 
     AppClass.__init__ = wrapped_init
