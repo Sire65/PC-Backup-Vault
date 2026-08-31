@@ -2,7 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nas_recovery.image_verification import manifest_matches_image, verify_image, write_manifest
+from nas_recovery.image_verification import VerificationCancelled, manifest_matches_image, verify_image, write_manifest
+from nas_recovery.recovery_coordinator import RecoveryCoordinator
 from nas_recovery.recovery_session import RecoverySession
 
 
@@ -23,6 +24,32 @@ class ImageVerificationTests(unittest.TestCase):
             manifest = write_manifest(verify_image(image))
             image.write_bytes(b"changed")
             self.assertFalse(manifest_matches_image(manifest))
+
+    def test_progress_reports_bytes_and_total(self):
+        with tempfile.TemporaryDirectory() as td:
+            image = Path(td) / "disk.img"
+            image.write_bytes(b"x" * 10000)
+            seen = []
+            result = verify_image(image, chunk_size=1024, progress=lambda done, total: seen.append((done, total)))
+            self.assertEqual(result.size, 10000)
+            self.assertTrue(seen)
+            self.assertEqual(seen[-1], (10000, 10000))
+
+    def test_cancelled_verification_never_marks_session_verified(self):
+        with tempfile.TemporaryDirectory() as td:
+            image = Path(td) / "disk.img"
+            image.write_bytes(b"x" * 10000)
+            c = RecoveryCoordinator(RecoverySession(source_identified=True, source_assessed=True))
+            c.attach_completed_image(image, device_id="disk-image")
+            calls = {"n": 0}
+            def cancel():
+                calls["n"] += 1
+                return calls["n"] > 1
+            with self.assertRaises(VerificationCancelled):
+                c.verify_attached_image(should_cancel=cancel)
+            self.assertFalse(c.session.image_verified)
+            self.assertEqual(c.session.image_sha256, "")
+            self.assertIsNone(c.last_manifest)
 
     def test_session_roundtrip_preserves_gates(self):
         with tempfile.TemporaryDirectory() as td:
