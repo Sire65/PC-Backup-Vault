@@ -22,6 +22,7 @@ from ui_clarity_fix_v182 import apply_ui_clarity_fix_v182
 from scheduler_release_v183 import apply_scheduler_release_v183
 from release_polish_v183 import apply_release_polish_v183
 from test_window_usability_v184 import apply_test_window_usability_v184
+from restore_assistant_v186 import apply_restore_assistant_v186
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -41,6 +42,7 @@ apply_heartbeat_led_v180(App)
 apply_ui_clarity_fix_v182(App, ui_module)
 apply_release_polish_v183(App, DashboardWindow, ui_module)
 apply_test_window_usability_v184(App)
+apply_restore_assistant_v186(App, BackupAssistant)
 
 
 def _show_already_running():
