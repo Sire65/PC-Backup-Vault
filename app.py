@@ -3,6 +3,7 @@ import threading
 from instance_lock import InstanceLock
 from ui import App, SettingsWindow
 from dashboard_window import DashboardWindow
+import plan_runner as plan_runner_module
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
@@ -42,12 +43,8 @@ apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
 enable_inventory_backup_handoff(App, BackupAssistant)
-apply_hidrive_sftp_v192(cloud_targets_module, storage_v180_module)
-# cloud_targets_ui_v191 imported helpers by name; point them at the completed SFTP implementations.
-cloud_targets_ui_module.test_cloud_account = cloud_targets_module.test_cloud_account
-cloud_targets_ui_module.filesystem_capable_method = cloud_targets_module.filesystem_capable_method
-cloud_targets_ui_module.ensure_filesystem_bridge = cloud_targets_module.ensure_filesystem_bridge
 apply_cloud_targets_v191(SettingsWindow, BackupAssistant, storage_v180_module)
+apply_hidrive_sftp_v192(App, cloud_targets_module, cloud_targets_ui_module, storage_v180_module, plan_runner_module)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_scheduler_release_v183(ui_module)
