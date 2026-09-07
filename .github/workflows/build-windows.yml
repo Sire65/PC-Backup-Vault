@@ -41,7 +41,9 @@ jobs:
 
       - name: Professionelle 1.8.0 Regression
         shell: pwsh
-        run: python -m unittest -v tests.test_professional_v180
+        run: |
+          python -m unittest -v tests.test_professional_v180
+          python -m unittest -v tests.test_bridge_system_image_v180
 
       - name: PC Backup Vault bauen
         shell: pwsh
