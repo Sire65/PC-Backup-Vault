@@ -3,10 +3,8 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Callable
 
-from cloud_targets_v191 import cloud_accounts
 from hidrive_sftp_v192 import _root, sftp_connection
 
 
@@ -63,12 +61,22 @@ def _hidrive_probe(store, account_id: str) -> tuple[bool, int, str]:
         return False, int((time.monotonic() - started) * 1000), _safe_detail(exc)
 
 
-def _hidrive_rows(store, probe: Callable[[object, str], tuple[bool, int, str]] | None = None) -> list[dict]:
-    probe = probe or _hidrive_probe
-    accounts = [
-        a for a in cloud_accounts(store)
+def _configured_hidrive_accounts(store) -> list[dict]:
+    """Read configured accounts without normalising or mutating the store.
+
+    Telemetry collection must be observational only. In particular it must not
+    call cloud_targets_v191.cloud_accounts(), because that helper may persist
+    missing defaults as part of normal UI initialisation.
+    """
+    return [
+        dict(a) for a in list(store.data.get("cloud_accounts") or [])
         if str(a.get("provider_code") or "").upper() == "STRATO_HIDRIVE" and a.get("enabled", True)
     ]
+
+
+def _hidrive_rows(store, probe: Callable[[object, str], tuple[bool, int, str]] | None = None) -> list[dict]:
+    probe = probe or _hidrive_probe
+    accounts = _configured_hidrive_accounts(store)
     rows = []
     for index, account in enumerate(accounts[:2], start=1):
         ok, latency, detail = probe(store, str(account.get("id") or ""))
@@ -99,6 +107,7 @@ def collect_storage_health(store, hidrive_probe=None) -> list[dict]:
     """Return read-only operational status for KC System Check.
 
     No password, username, endpoint, remote root or local/UNC path is emitted.
-    HiDrive checks authenticate and stat only; they never create test files.
+    HiDrive checks authenticate and stat only; they never create test files and
+    this collector never modifies the Backup Vault configuration.
     """
     return [*_nas_rows(store), *_hidrive_rows(store, hidrive_probe)]
