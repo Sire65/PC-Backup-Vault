@@ -14,6 +14,7 @@ from professional_integration_v180 import apply_professional_v180
 from system_image_integration_v180 import apply_system_image_assistant
 from all_tests_and_run_now_v180 import apply_all_tests_and_run_now_v180
 from filesystem_progress_fix_v180 import apply_filesystem_progress_fix
+from heartbeat_led_v180 import apply_heartbeat_led_v180
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -28,6 +29,7 @@ apply_assistant_v180(App)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_all_tests_and_run_now_v180(App, BackupAssistant, ui_module)
+apply_heartbeat_led_v180(App)
 
 
 def _show_already_running():
@@ -55,7 +57,12 @@ def main():
             app = App()
             app._instance_lock = lock
             # KICC telemetry is observation-only and never participates in backup/restore decisions.
-            app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn)
+            def heartbeat_pulse(success=None):
+                try:
+                    app.after(0, lambda s=success: app.heartbeat_pulse_v180(s))
+                except Exception:
+                    pass
+            app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn, heartbeat_pulse)
             # KC programs submit backup requests to the local durable bridge. The bridge contains no secrets.
             app._kc_backup_bridge = start_bridge(app)
             schedule_startup_update_check(app)
