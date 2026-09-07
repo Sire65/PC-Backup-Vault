@@ -56,7 +56,15 @@ class TransferMonitor(tk.Toplevel):
         eta=metrics.get("eta_seconds")
         if eta is None and avg>0 and total>=done: eta=(total-done)/avg
         pct=(done/total*100) if total else ((d/t*100) if t else 0)
-        self.progress["value"]=max(0,min(100,pct)); self.title_lbl.config(text=message or metrics.get("phase") or "Backup läuft")
+        self.progress["value"]=max(0,min(100,pct))
+        phase=str(metrics.get("phase") or "").lower()
+        completed = pct >= 99.999 and ("fertig" in phase or "abgeschlossen" in str(message or "").lower())
+        if completed:
+            self.title("PC Backup Vault – Backup abgeschlossen")
+            self.title_lbl.config(text="Backup abgeschlossen")
+        else:
+            self.title("PC Backup Vault – Backup läuft")
+            self.title_lbl.config(text=message or metrics.get("phase") or "Backup läuft")
         self.speed.config(text=f"Aktuell: {_human_rate(speed)}"); self.avg.config(text=f"Durchschnitt: {_human_rate(avg)}")
         self.peak.config(text=f"Spitze: {_human_rate(max(peak,float(metrics.get('peak_bps') or 0)))}")
         self.files.config(text=f"Dateien: {int(d or 0)} / {int(t or 0)}")
@@ -104,7 +112,10 @@ def apply_transfer_monitor(AppClass):
         if not running:
             mon=getattr(self,"_transfer_monitor_v180",None)
             try:
-                if mon and mon.winfo_exists(): mon.after(1800,mon.destroy)
+                if mon and mon.winfo_exists():
+                    mon.title("PC Backup Vault – Backup abgeschlossen")
+                    mon.title_lbl.config(text="Backup abgeschlossen")
+                    mon.after(2200,mon.destroy)
             except Exception:pass
         return result
 
