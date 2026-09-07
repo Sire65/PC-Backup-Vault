@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/project-finder-productive-inventory
+      - feature/hidrive-sftp-v192
     paths:
       - "**.py"
       - "requirements.txt"
@@ -55,11 +56,12 @@ jobs:
           python -m unittest -v tests.test_scheduler_release_v183
           python -m unittest -v tests.test_restore_path_fix_v188
           python -m unittest -v tests.test_inventory_backup_handoff_v190
+          python -m unittest -v tests.test_hidrive_sftp_v192
 
       - name: PC Backup Vault bauen
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
+          pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
 
       - name: Portables Windows-Paket erstellen
         shell: pwsh
