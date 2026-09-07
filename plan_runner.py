@@ -41,10 +41,11 @@ def _run_secondary_copy(store, plan, paths, key, progress=None, control=None):
 
 
 def _run_filesystem_plan(store, plan, paths, key, progress=None, control=None):
-    """Run a 1.8.0 filesystem target without any graphical UI.
+    """Run a filesystem/cloud-filesystem target without graphical UI.
 
     This is the path used by Windows Task Scheduler. The target ID stored in the
-    plan is authoritative; an arbitrary currently active target is never used.
+    plan is authoritative. Cloud SMB targets reconnect with credentials from the
+    Windows credential store before the filesystem backup begins.
     """
     from storage_v180 import filesystem_backup, _target
 
@@ -54,6 +55,9 @@ def _run_filesystem_plan(store, plan, paths, key, progress=None, control=None):
     target = _target(store, target_id)
     if not target:
         raise ValueError("Das im Job gespeicherte Laufwerk-/Ordner-/NAS-Ziel wurde nicht gefunden.")
+    if target.get("cloud_account_id"):
+        from cloud_targets_v191 import prepare_cloud_filesystem_target
+        target = prepare_cloud_filesystem_target(store, dict(target))
 
     class _HeadlessApp:
         def __init__(self, store_, key_):
@@ -84,8 +88,6 @@ def run_plan(plan_id: str, progress=None, control=None, resume_from_job_id=None)
     payload_target = str(plan.get("payload_target") or "AUTO").upper()
     trigger = "SCHEDULED" if plan.get("schedule_type") not in (None, "MANUAL") else "ONE_TOUCH"
 
-    # Filesystem jobs are independent of Neon payload storage. Their manifest and
-    # encrypted chunks live on the selected filesystem target.
     if payload_target == "FILESYSTEM":
         try:
             result = _run_filesystem_plan(store, plan, paths, key, progress=progress, control=control)
