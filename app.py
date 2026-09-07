@@ -1,17 +1,21 @@
 import argparse
 from instance_lock import InstanceLock
-from ui import App
+from ui import App, SettingsWindow
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
 from storage_v180 import apply_v180
+from storage_v180_settings import apply_settings_v180
+from transfer_monitor_v180 import apply_transfer_monitor
 import ui as ui_module
 
 
 enable_project_finder(App)
 enable_auto_update(App)
 apply_v180(App, ui_module)
+apply_settings_v180(SettingsWindow)
+apply_transfer_monitor(App)
 
 
 def _show_already_running():
