@@ -1,5 +1,5 @@
 #define MyAppName "PC Backup Vault"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.8.1"
 #define MyAppPublisher "KC"
 #define MyAppExeName "PC_Backup_Vault.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={autopf}\PC Backup Vault
 DefaultGroupName=PC Backup Vault
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=PC_Backup_Vault_1.8.0_Setup
+OutputBaseFilename=PC_Backup_Vault_1.8.1_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
