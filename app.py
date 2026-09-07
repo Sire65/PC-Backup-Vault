@@ -2,6 +2,7 @@ import argparse
 import threading
 from instance_lock import InstanceLock
 from ui import App, SettingsWindow
+from dashboard_window import DashboardWindow
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
@@ -19,6 +20,7 @@ from filesystem_progress_fix_v180 import apply_filesystem_progress_fix
 from heartbeat_led_v180 import apply_heartbeat_led_v180
 from ui_clarity_fix_v182 import apply_ui_clarity_fix_v182
 from scheduler_release_v183 import apply_scheduler_release_v183
+from release_polish_v183 import apply_release_polish_v183
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -36,6 +38,7 @@ apply_scheduler_release_v183(ui_module)
 apply_all_tests_and_run_now_v180(App, BackupAssistant, ui_module)
 apply_heartbeat_led_v180(App)
 apply_ui_clarity_fix_v182(App, ui_module)
+apply_release_polish_v183(App, DashboardWindow, ui_module)
 
 
 def _show_already_running():
@@ -62,15 +65,12 @@ def main():
         else:
             app = App()
             app._instance_lock = lock
-            # KICC telemetry is observation-only and never participates in backup/restore decisions.
             def heartbeat_pulse(success=None):
                 try:
                     app.after(0, lambda s=success: app.heartbeat_pulse_v180(s))
                 except Exception:
                     pass
             app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn, heartbeat_pulse)
-            # Repair/migrate auto-managed Windows tasks to the executable currently in use.
-            # This also removes stale tasks for plans that are intentionally MANUAL.
             def sync_scheduler_background():
                 try:
                     sync_all_tasks(app.store)
@@ -78,11 +78,10 @@ def main():
                 except Exception:
                     pass
             threading.Thread(target=sync_scheduler_background, name="pbv-scheduler-sync", daemon=True).start()
-            # KC programs submit backup requests to the local durable bridge. The bridge contains no secrets.
             app._kc_backup_bridge = start_bridge(app)
             schedule_startup_update_check(app)
             app.mainloop()
-            lock = None  # App owns/released below only if explicit; process exit releases regardless.
+            lock = None
         return 0
     finally:
         if lock is not None:
