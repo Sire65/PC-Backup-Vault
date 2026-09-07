@@ -9,7 +9,8 @@ def safe_relative_restore_path(original_path: str, file_name: str) -> Path:
     """Map an original Windows folder to a strictly relative path below a restore root.
 
     Drive roots and UNC anchors must never survive as absolute path components, otherwise
-    pathlib on Windows can silently discard the selected restore root.
+    pathlib on Windows can silently discard the selected restore root. File names are parsed
+    with Windows semantics too, so backslash-based traversal cannot survive Linux CI.
     """
     p = PureWindowsPath(str(original_path or ""))
     parts: list[str] = []
@@ -33,9 +34,13 @@ def safe_relative_restore_path(original_path: str, file_name: str) -> Path:
             continue
         parts.append(clean)
 
-    safe_name = Path(str(file_name or "Datei")).name
+    # Always apply Windows path rules: Path.name on Linux treats backslashes as
+    # ordinary characters and would therefore preserve '..\\..\\file.pdf'.
+    safe_name = PureWindowsPath(str(file_name or "Datei")).name
+    safe_name = safe_name.replace("/", "").replace("\\", "")
     if not safe_name or safe_name in {".", ".."}:
         safe_name = "Datei"
+
     rel = Path(*parts) / safe_name
     if rel.is_absolute():
         raise ValueError("Interner Fehler: Wiederherstellungspfad ist nicht relativ.")
