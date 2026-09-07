@@ -1,0 +1,22 @@
+PC BACKUP VAULT 1.8.0
+=====================
+
+Neu in 1.8.0
+------------
+- Neues Backup-Ziel: USB-Stick, externe HDD/SSD, lokales Laufwerk, frei wählbarer Ordner und NAS/UNC-Pfad.
+- Zielauswahl über Windows-Ordnerdialog: Laufwerk -> Ordner -> Unterordner frei wählbar.
+- Zusätzlich können NAS-Ziele direkt als UNC-Pfad (z. B. \\NAS\Backup\PC-Vault) hinterlegt werden.
+- Mehrere benannte Dateisystem-Ziele können gespeichert und wieder ausgewählt werden.
+- Vor dem Backup wird das Ziel auf Erreichbarkeit und Schreibbarkeit geprüft.
+- Dateisystem-Backups bleiben clientseitig mit AES-256-GCM verschlüsselt; Dateinamen/Pfade stehen im Manifest nur verschlüsselt.
+- One-Touch zeigt jetzt die Anzahl vorhandener aktiver Jobs: One-Touch (1), One-Touch (4) usw.
+- Bei genau einem Job startet One-Touch sofort.
+- Bei mehreren Jobs öffnet sich eine kompakte Tabelle zur Auswahl des gewünschten Jobs.
+- Jeder One-Touch-Plan kann ein eigenes Laufwerk/Ordner/NAS-Ziel speichern.
+- Neues Live-Transferfenster im Stil des Windows-Kopierdialogs mit Fortschritt, Geschwindigkeitskurve, aktuellem Tempo, Durchschnitt, Spitze, Dateizahl, Datenmenge, Laufzeit, Restzeit und aktueller Datei.
+- Das Live-Transferfenster wird sowohl für bestehende Online-Backups als auch für die neuen Dateisystem-Backups verwendet.
+- KC/KICC-Lebenszeichen bleibt aktiv: Backup-Telemetrie startet weiterhin mit der Anwendung und sendet regelmäßig den technischen Zustands-Snapshot, sofern KC-Kommunikation aktiviert und gekoppelt ist.
+
+Hinweis
+-------
+Die neue Dateisystem-Sicherung verwendet einen eigenen verschlüsselten Vault-Ordner '.pc-backup-vault' auf dem gewählten Zielmedium. Bestehende Neon-/B2-Sicherungen bleiben unverändert kompatibel.
