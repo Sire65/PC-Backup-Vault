@@ -19,7 +19,7 @@ apply_v180(App, ui_module)
 apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
-apply_professional_v180(App, BackupAssistant)
+apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 
 
 def _show_already_running():
