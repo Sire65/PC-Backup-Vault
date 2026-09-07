@@ -8,6 +8,7 @@ from update_ui import enable_auto_update, schedule_startup_update_check
 from storage_v180 import apply_v180
 from storage_v180_settings import apply_settings_v180
 from transfer_monitor_v180 import apply_transfer_monitor
+from assistant_v180 import apply_assistant_v180
 import ui as ui_module
 
 
@@ -16,6 +17,7 @@ enable_auto_update(App)
 apply_v180(App, ui_module)
 apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
+apply_assistant_v180(App)
 
 
 def _show_already_running():
