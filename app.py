@@ -10,6 +10,8 @@ from storage_v180_settings import apply_settings_v180
 from transfer_monitor_v180 import apply_transfer_monitor
 from assistant_v180 import apply_assistant_v180, BackupAssistant
 from professional_integration_v180 import apply_professional_v180
+from system_image_integration_v180 import apply_system_image_assistant
+from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
 
@@ -20,6 +22,7 @@ apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
+apply_system_image_assistant(BackupAssistant)
 
 
 def _show_already_running():
@@ -48,6 +51,8 @@ def main():
             app._instance_lock = lock
             # KICC telemetry is observation-only and never participates in backup/restore decisions.
             app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn)
+            # KC programs submit backup requests to the local durable bridge. The bridge contains no secrets.
+            app._kc_backup_bridge = start_bridge(app)
             schedule_startup_update_check(app)
             app.mainloop()
             lock = None  # App owns/released below only if explicit; process exit releases regardless.
