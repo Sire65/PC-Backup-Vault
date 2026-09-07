@@ -5,6 +5,7 @@ from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
+import storage_v180 as storage_v180_module
 from storage_v180 import apply_v180
 from storage_v180_settings import apply_settings_v180
 from transfer_monitor_v180 import apply_transfer_monitor
@@ -12,6 +13,7 @@ from assistant_v180 import apply_assistant_v180, BackupAssistant
 from professional_integration_v180 import apply_professional_v180
 from system_image_integration_v180 import apply_system_image_assistant
 from all_tests_and_run_now_v180 import apply_all_tests_and_run_now_v180
+from filesystem_progress_fix_v180 import apply_filesystem_progress_fix
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -19,6 +21,7 @@ import ui as ui_module
 enable_project_finder(App)
 enable_auto_update(App)
 apply_v180(App, ui_module)
+apply_filesystem_progress_fix(storage_v180_module)
 apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
