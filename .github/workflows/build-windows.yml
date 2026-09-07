@@ -41,7 +41,7 @@ jobs:
       - name: Versionskonsistenz prüfen
         shell: pwsh
         run: |
-          python -c "from config_store import APP_VERSION; assert APP_VERSION == '1.8.8', APP_VERSION; print('APP_VERSION', APP_VERSION)"
+          python -c "from config_store import APP_VERSION; assert APP_VERSION == '1.8.9', APP_VERSION; print('APP_VERSION', APP_VERSION)"
 
       - name: Integrierten Quellstand kompilieren
         shell: pwsh
@@ -63,7 +63,7 @@ jobs:
       - name: Portables Windows-Paket erstellen
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.8.8_Windows_Portable.zip" -Force
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.8.9_Windows_Portable.zip" -Force
 
       - name: Inno Setup installieren
         shell: pwsh
@@ -73,45 +73,45 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
-          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.8.8_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
-          $hash = (Get-FileHash "installer\output\PC_Backup_Vault_1.8.8_Setup.exe" -Algorithm SHA256).Hash.ToLower()
-          "$hash  PC_Backup_Vault_1.8.8_Setup.exe" | Set-Content -Encoding ascii "installer\output\PC_Backup_Vault_1.8.8_Setup.exe.sha256"
+          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.8.9_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
+          $hash = (Get-FileHash "installer\output\PC_Backup_Vault_1.8.9_Setup.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  PC_Backup_Vault_1.8.9_Setup.exe" | Set-Content -Encoding ascii "installer\output\PC_Backup_Vault_1.8.9_Setup.exe.sha256"
 
       - name: Windows Installer bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.8.8_Setup
+          name: PC_Backup_Vault_1.8.9_Setup
           path: |
-            installer/output/PC_Backup_Vault_1.8.8_Setup.exe
-            installer/output/PC_Backup_Vault_1.8.8_Setup.exe.sha256
+            installer/output/PC_Backup_Vault_1.8.9_Setup.exe
+            installer/output/PC_Backup_Vault_1.8.9_Setup.exe.sha256
           if-no-files-found: error
           retention-days: 30
 
       - name: Portable Version bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.8.8_Windows_Portable
-          path: PC_Backup_Vault_1.8.8_Windows_Portable.zip
+          name: PC_Backup_Vault_1.8.9_Windows_Portable
+          path: PC_Backup_Vault_1.8.9_Windows_Portable.zip
           if-no-files-found: error
           retention-days: 30
 
-      - name: Release v1.8.8 für Update-Funktion veröffentlichen
+      - name: Release v1.8.9 für Update-Funktion veröffentlichen
         if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.8.8"
+          $tag = "v1.8.9"
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "$tag ist bereits veröffentlicht; Release bleibt unverändert."
             exit 0
           }
           gh release create $tag `
-            "installer/output/PC_Backup_Vault_1.8.8_Setup.exe" `
-            "installer/output/PC_Backup_Vault_1.8.8_Setup.exe.sha256" `
-            "PC_Backup_Vault_1.8.8_Windows_Portable.zip" `
+            "installer/output/PC_Backup_Vault_1.8.9_Setup.exe" `
+            "installer/output/PC_Backup_Vault_1.8.9_Setup.exe.sha256" `
+            "PC_Backup_Vault_1.8.9_Windows_Portable.zip" `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
-            --title "PC Backup Vault v1.8.8" `
-            --notes "1.8.8: behebt den Wiederherstellungsfehler bei separatem Zielordner. Windows-Laufwerks- und UNC-Pfade werden jetzt garantiert relativ unterhalb des gewählten Wiederherstellungsordners abgebildet; zusätzlicher Regressionstest verhindert ein erneutes Ausbrechen aus dem Zielordner."
+            --title "PC Backup Vault v1.8.9" `
+            --notes "1.8.9: erweiterte Wiederherstellungsfilter nach Suchtext, Zeitraum und freiem Von/Bis-Datum, Verzeichnis, Dateityp, Backup-Plan, Speicherziel und Dateigröße. Wahlweise neueste Version je Datei oder alle Sicherungsstände; aktive Filter werden gezählt und lassen sich mit einem Klick zurücksetzen."
