@@ -15,6 +15,9 @@ on:
       - "installer/**"
       - ".github/workflows/build-windows.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -39,7 +42,7 @@ jobs:
         shell: pwsh
         run: python -m compileall -q .
 
-      - name: Professionelle 1.8.0 Regression
+      - name: Professionelle 1.8 Regression
         shell: pwsh
         run: |
           python -m unittest -v tests.test_professional_v180
@@ -53,7 +56,7 @@ jobs:
       - name: Portables Windows-Paket erstellen
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.8.0_Windows_Portable.zip" -Force
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_1.8.1_Windows_Portable.zip" -Force
 
       - name: Inno Setup installieren
         shell: pwsh
@@ -63,24 +66,45 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
-          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.8.0_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
-          $hash = (Get-FileHash "installer\output\PC_Backup_Vault_1.8.0_Setup.exe" -Algorithm SHA256).Hash.ToLower()
-          "$hash  PC_Backup_Vault_1.8.0_Setup.exe" | Set-Content -Encoding ascii "installer\output\PC_Backup_Vault_1.8.0_Setup.exe.sha256"
+          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.8.1_Setup.exe")) { throw "Setup EXE wurde nicht erzeugt" }
+          $hash = (Get-FileHash "installer\output\PC_Backup_Vault_1.8.1_Setup.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  PC_Backup_Vault_1.8.1_Setup.exe" | Set-Content -Encoding ascii "installer\output\PC_Backup_Vault_1.8.1_Setup.exe.sha256"
 
       - name: Windows Installer bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.8.0_Setup
+          name: PC_Backup_Vault_1.8.1_Setup
           path: |
-            installer/output/PC_Backup_Vault_1.8.0_Setup.exe
-            installer/output/PC_Backup_Vault_1.8.0_Setup.exe.sha256
+            installer/output/PC_Backup_Vault_1.8.1_Setup.exe
+            installer/output/PC_Backup_Vault_1.8.1_Setup.exe.sha256
           if-no-files-found: error
           retention-days: 30
 
       - name: Portable Version bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: PC_Backup_Vault_1.8.0_Windows_Portable
-          path: PC_Backup_Vault_1.8.0_Windows_Portable.zip
+          name: PC_Backup_Vault_1.8.1_Windows_Portable
+          path: PC_Backup_Vault_1.8.1_Windows_Portable.zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Release v1.8.1 für Update-Funktion veröffentlichen
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v1.8.1"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "$tag ist bereits veröffentlicht; Release bleibt unverändert."
+            exit 0
+          }
+          gh release create $tag `
+            "installer/output/PC_Backup_Vault_1.8.1_Setup.exe" `
+            "installer/output/PC_Backup_Vault_1.8.1_Setup.exe.sha256" `
+            "PC_Backup_Vault_1.8.1_Windows_Portable.zip" `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "PC Backup Vault v1.8.1" `
+            --notes "Update-Release 1.8.1: erweiterter Gesamttest mit Kopieren/Datei, Live-Einzeltests der Status-LEDs, sofortiger Assistent-Jobstart, sichtbarer Dateisystem-Fortschritt und Heartbeat/Lebenszeichen-Anzeige."
