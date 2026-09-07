@@ -1,0 +1,36 @@
+name: Aktuellen Quellstand als ZIP sichern
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  source-snapshot:
+    runs-on: windows-latest
+    steps:
+      - name: Aktuellen Quellstand laden
+        uses: actions/checkout@v4
+
+      - name: Quellstand identifizieren
+        shell: pwsh
+        run: |
+          $sha = git rev-parse HEAD
+          $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+          "commit=$sha" | Set-Content -Encoding utf8 SOURCE_SNAPSHOT.txt
+          "created=$stamp" | Add-Content -Encoding utf8 SOURCE_SNAPSHOT.txt
+
+      - name: Quellstand als ZIP packen
+        shell: pwsh
+        run: |
+          $items = Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' -and $_.Name -ne 'PC_Backup_Vault_latest_source.zip' }
+          Compress-Archive -Path $items.FullName -DestinationPath "PC_Backup_Vault_latest_source.zip" -Force
+
+      - name: ZIP bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC_Backup_Vault_latest_source
+          path: PC_Backup_Vault_latest_source.zip
+          if-no-files-found: error
+          retention-days: 30
