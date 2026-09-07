@@ -11,6 +11,7 @@ from transfer_monitor_v180 import apply_transfer_monitor
 from assistant_v180 import apply_assistant_v180, BackupAssistant
 from professional_integration_v180 import apply_professional_v180
 from system_image_integration_v180 import apply_system_image_assistant
+from all_tests_and_run_now_v180 import apply_all_tests_and_run_now_v180
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -23,6 +24,7 @@ apply_transfer_monitor(App)
 apply_assistant_v180(App)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
+apply_all_tests_and_run_now_v180(App, BackupAssistant, ui_module)
 
 
 def _show_already_running():
