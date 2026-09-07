@@ -1,10 +1,12 @@
 import argparse
+import threading
 from instance_lock import InstanceLock
 from ui import App, SettingsWindow
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
 from update_ui import enable_auto_update, schedule_startup_update_check
+from scheduler import sync_all_tasks
 import storage_v180 as storage_v180_module
 from storage_v180 import apply_v180
 from storage_v180_settings import apply_settings_v180
@@ -65,6 +67,15 @@ def main():
                 except Exception:
                     pass
             app._kicc_backup_telemetry = start_backup_telemetry(app.store, app.active_dsn, heartbeat_pulse)
+            # Repair/migrate auto-managed Windows tasks to the executable currently in use.
+            # This also removes stale tasks for plans that are intentionally MANUAL.
+            def sync_scheduler_background():
+                try:
+                    sync_all_tasks(app.store)
+                    app.after(0, app.refresh_system_status)
+                except Exception:
+                    pass
+            threading.Thread(target=sync_scheduler_background, name="pbv-scheduler-sync", daemon=True).start()
             # KC programs submit backup requests to the local durable bridge. The bridge contains no secrets.
             app._kc_backup_bridge = start_bridge(app)
             schedule_startup_update_check(app)
