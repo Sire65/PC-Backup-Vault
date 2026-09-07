@@ -26,6 +26,7 @@ from test_window_usability_v184 import apply_test_window_usability_v184
 from restore_assistant_v186 import apply_restore_assistant_v186, RestoreAssistant, _file_group, _fmt_size
 from restore_path_fix_v188 import apply_restore_path_fix_v188
 from restore_filters_v189 import apply_restore_filters_v189
+from cloud_targets_ui_v191 import apply_cloud_targets_v191
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -38,6 +39,7 @@ apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
 enable_inventory_backup_handoff(App, BackupAssistant)
+apply_cloud_targets_v191(SettingsWindow, BackupAssistant, storage_v180_module)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_scheduler_release_v183(ui_module)
