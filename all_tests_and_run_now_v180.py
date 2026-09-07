@@ -2,22 +2,28 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from datetime import datetime
+from tkinter import ttk, messagebox, filedialog
 
 from backup_engine import BackupCancelled, guard_active
+from object_store import make_b2_store
 from plan_runner import run_plan
+from scheduler import task_status
+from vault_db import test_connection
+from kc_communication import make_client as make_kc_client
 
 
 def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
     """Add a consolidated test run and make assistant jobs optionally run immediately.
 
-    This is an integration layer only. Existing individual TÜV checks, status indicators,
-    reports and plan execution paths remain intact.
+    The consolidated run contains the complete TÜV test set plus the live tests which are
+    otherwise reached by clicking the status LEDs. Existing individual results and TÜV
+    persistence remain intact.
     """
 
     # ------------------------------------------------------------------
-    # 1) System bar: one button runs the complete TÜV and shows one
-    #    consolidated evaluation while retaining every individual result.
+    # 1) System bar: one button runs the complete TÜV plus the live LED
+    #    checks and shows one consolidated evaluation.
     # ------------------------------------------------------------------
     original_build = AppClass._build
 
@@ -42,7 +48,6 @@ def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
                 text="✓ Alle Tests durchführen",
                 command=self.run_all_tests_v180,
             )
-            # Left packing places it directly behind the existing status indicators.
             self.btn_all_tests_v180.pack(side="left", padx=(2, 10))
 
     AppClass._build = _build
@@ -67,8 +72,8 @@ def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
 
         win = tk.Toplevel(self)
         win.title("PC Backup Vault – Alle Tests")
-        win.geometry("1120x700")
-        win.minsize(920, 560)
+        win.geometry("1120x730")
+        win.minsize(920, 580)
         win.transient(self)
 
         head = ttk.Frame(win, padding=(14, 12, 14, 8))
@@ -80,7 +85,7 @@ def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
         bar.pack(fill="x", pady=(8, 0))
         bar.start(12)
 
-        body = ttk.Frame(win, padding=(14, 0, 14, 12))
+        body = ttk.Frame(win, padding=(14, 0, 14, 8))
         body.pack(fill="both", expand=True)
         tree = ttk.Treeview(body, columns=("code", "name", "result", "details"), show="headings")
         tree.heading("code", text="Prüfung")
@@ -100,56 +105,169 @@ def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
         body.rowconfigure(0, weight=1)
         body.columnconfigure(0, weight=1)
 
-        footer = ttk.Frame(win, padding=(14, 0, 14, 12))
+        footer = ttk.Frame(win, padding=(14, 4, 14, 12))
         footer.pack(fill="x")
         ttk.Label(
             footer,
-            text="Jeder Einzeltest bleibt erhalten und wird wie bisher im TÜV-Protokoll gespeichert.",
-        ).pack(side="left")
-        ttk.Button(footer, text="Schließen", command=win.destroy).pack(side="right")
+            text="Enthält TÜV/Core-Prüfungen und die Live-Einzeltests der Status-LEDs. Jeder Einzeltest bleibt sichtbar und die TÜV-Prüfungen werden weiterhin im TÜV-Protokoll gespeichert.",
+            wraplength=680,
+        ).pack(side="left", fill="x", expand=True)
+
+        button_box = ttk.Frame(footer)
+        button_box.pack(side="right", padx=(10, 0))
+        btn_copy = ttk.Button(button_box, text="📋 Tests kopieren", state="disabled")
+        btn_copy.pack(side="left", padx=(0, 6))
+        btn_save = ttk.Button(button_box, text="💾 Datei erstellen", state="disabled")
+        btn_save.pack(side="left", padx=(0, 6))
+        ttk.Button(button_box, text="Schließen", command=win.destroy).pack(side="left")
 
         try:
             self.btn_all_tests_v180.configure(state="disabled")
         except Exception:
             pass
 
-        def work():
+        report_holder = {"text": ""}
+
+        def make_report(checks):
+            passed = sum(1 for c in checks if str(c[2]).upper() == "PASS")
+            warns = sum(1 for c in checks if str(c[2]).upper() == "WARN")
+            failed = sum(1 for c in checks if str(c[2]).upper() == "FAIL")
+            overall = "FEHLER" if failed else ("WARNUNGEN" if warns else "PASS")
+            lines = [
+                "PC BACKUP VAULT – ALLE TESTS",
+                "=" * 48,
+                f"Erstellt: {datetime.now().astimezone().strftime('%d.%m.%Y %H:%M:%S')}",
+                f"Gesamtergebnis: {overall}",
+                f"Prüfungen: {len(checks)} · PASS: {passed} · Warnungen: {warns} · Fehler: {failed}",
+                "",
+            ]
+            for code, name, result, details in checks:
+                lines.append(f"{code} | {name} | {result} | {details}")
+            return "\n".join(lines), overall, passed, warns, failed
+
+        def copy_report():
+            text = report_holder.get("text") or ""
+            if not text:
+                return
             try:
-                # ui_module.run_tuev is intentionally used at runtime so the professional
-                # 1.8 extension (filesystem checks) remains part of the consolidated run.
-                checks = ui_module.run_tuev(
+                self.clipboard_clear()
+                self.clipboard_append(text)
+                self.update_idletasks()
+                messagebox.showinfo("PC Backup Vault", "Testergebnis wurde in die Zwischenablage kopiert.", parent=win)
+            except Exception as exc:
+                messagebox.showerror("PC Backup Vault", f"Kopieren fehlgeschlagen:\n\n{exc}", parent=win)
+
+        def save_report():
+            text = report_holder.get("text") or ""
+            if not text:
+                return
+            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            path = filedialog.asksaveasfilename(
+                parent=win,
+                title="Testergebnis speichern",
+                defaultextension=".txt",
+                initialfile=f"PC_Backup_Vault_Alle_Tests_{stamp}.txt",
+                filetypes=[("Textdatei", "*.txt"), ("Alle Dateien", "*.*")],
+            )
+            if not path:
+                return
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                messagebox.showinfo("PC Backup Vault", f"Testergebnis gespeichert:\n\n{path}", parent=win)
+            except Exception as exc:
+                messagebox.showerror("PC Backup Vault", f"Datei konnte nicht erstellt werden:\n\n{exc}", parent=win)
+
+        btn_copy.configure(command=copy_report)
+        btn_save.configure(command=save_report)
+
+        def work():
+            checks = []
+            try:
+                # Complete TÜV/Core set, including professional 1.8 filesystem checks.
+                checks.extend(list(ui_module.run_tuev(
                     dsn,
                     bool(self.master_key()),
                     bool(self.store.data.get("recovery_key_exported")),
                     profile,
                     self.store.data,
-                )
-                checks = list(checks or [])
+                ) or []))
             except Exception as exc:
-                checks = [("ALL-999", "Gesamttest", "FAIL", str(exc))]
+                checks.append(("ALL-999", "TÜV/Core-Gesamttest", "FAIL", str(exc)))
+
+            # Live tests equivalent to the tests behind the clickable status LEDs.
+            try:
+                ok, msg = test_connection(dsn)
+                checks.append(("LED-NEON", "Neon Live-Verbindung", "PASS" if ok else "FAIL", msg))
+            except Exception as exc:
+                checks.append(("LED-NEON", "Neon Live-Verbindung", "FAIL", str(exc)))
+
+            try:
+                b2cfg = self.store.get_b2_runtime_config()
+                if not b2cfg.get("configured"):
+                    checks.append(("LED-B2", "B2 Live-Verbindung", "WARN", "B2 nicht vollständig eingerichtet"))
+                else:
+                    b2store = make_b2_store(b2cfg)
+                    ok, msg = b2store.ping() if b2store else (False, "B2 nicht eingerichtet")
+                    checks.append(("LED-B2", "B2 Live-Verbindung", "PASS" if ok else "FAIL", msg))
+            except Exception as exc:
+                checks.append(("LED-B2", "B2 Live-Verbindung", "FAIL", str(exc)))
+
+            try:
+                has_key = bool(self.master_key())
+                checks.append(("LED-VAULT", "Lokaler Tresor", "PASS" if has_key else "FAIL", "Tresorschlüssel vorhanden" if has_key else "Tresorschlüssel fehlt"))
+            except Exception as exc:
+                checks.append(("LED-VAULT", "Lokaler Tresor", "FAIL", str(exc)))
+
+            try:
+                plans = list(self.store.data.get("plans", []) or [])
+                if not plans:
+                    checks.append(("LED-SCHED", "Windows Scheduler", "WARN", "Noch kein Backup-Plan vorhanden"))
+                else:
+                    ok, msg = task_status(plans[0])
+                    detail = "Windows-Aufgabe vorhanden" if ok else ((msg or "Aufgabe nicht gefunden").splitlines()[0])
+                    checks.append(("LED-SCHED", "Windows Scheduler", "PASS" if ok else "WARN", detail))
+            except Exception as exc:
+                checks.append(("LED-SCHED", "Windows Scheduler", "WARN", str(exc)))
+
+            try:
+                kc_cfg = self.store.data.get("kc_communication") or {}
+                if not kc_cfg.get("enabled"):
+                    checks.append(("LED-KC", "KC Kommunikation Live", "WARN", "KC Kommunikation ist ausgeschaltet"))
+                else:
+                    client = make_kc_client(self.store)
+                    if not client:
+                        checks.append(("LED-KC", "KC Kommunikation Live", "WARN", "Gerät noch nicht registriert / gekoppelt"))
+                    else:
+                        ok, msg = client.test()
+                        level = "PASS" if ok else ("WARN" if "pending" in str(msg).lower() or "pairing" in str(msg).lower() else "FAIL")
+                        checks.append(("LED-KC", "KC Kommunikation Live", level, msg))
+            except Exception as exc:
+                checks.append(("LED-KC", "KC Kommunikation Live", "FAIL", str(exc)))
 
             def done():
+                # Always re-enable the main button even if the result window was closed.
+                try:
+                    self.btn_all_tests_v180.configure(state="normal")
+                except Exception:
+                    pass
+                try:
+                    self.refresh_system_status()
+                except Exception:
+                    pass
                 if not win.winfo_exists():
                     return
                 bar.stop()
                 bar.configure(mode="determinate", maximum=100, value=100)
-                passed = sum(1 for c in checks if str(c[2]).upper() == "PASS")
-                warns = sum(1 for c in checks if str(c[2]).upper() == "WARN")
-                failed = sum(1 for c in checks if str(c[2]).upper() == "FAIL")
-                overall = "FEHLER" if failed else ("WARNUNGEN" if warns else "PASS")
+                report, overall, passed, warns, failed = make_report(checks)
+                report_holder["text"] = report
                 lbl_summary.configure(
                     text=f"Gesamtergebnis: {overall} · Prüfungen: {len(checks)} · PASS: {passed} · Warnungen: {warns} · Fehler: {failed}"
                 )
                 for c in checks:
                     tree.insert("", "end", values=c)
-                try:
-                    self.refresh_system_status()
-                except Exception:
-                    pass
-                try:
-                    self.btn_all_tests_v180.configure(state="normal")
-                except Exception:
-                    pass
+                btn_copy.configure(state="normal")
+                btn_save.configure(state="normal")
 
             self.after(0, done)
 
@@ -264,14 +382,16 @@ def apply_all_tests_and_run_now_v180(AppClass, AssistantClass, ui_module):
                 except Exception:
                     pass
             except Exception as exc:
-                def failed():
+                error_text = str(exc)
+
+                def failed(error=error_text):
                     try:
                         self._finish_backup_control()
                     except Exception:
                         pass
                     messagebox.showerror(
                         "PC Backup Vault",
-                        f"Der Job wurde gespeichert, konnte aber nicht ausgeführt werden:\n\n{exc}",
+                        f"Der Job wurde gespeichert, konnte aber nicht ausgeführt werden:\n\n{error}",
                         parent=self,
                     )
                 self.after(0, failed)
