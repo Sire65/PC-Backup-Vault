@@ -6,6 +6,7 @@ from dashboard_window import DashboardWindow
 from plan_runner import run_plan
 from kicc_backup_telemetry import start_backup_telemetry
 from project_finder.main_integration import enable_project_finder
+from project_finder.backup_handoff_v190 import enable_inventory_backup_handoff
 from update_ui import enable_auto_update, schedule_startup_update_check
 from scheduler import sync_all_tasks
 import storage_v180 as storage_v180_module
@@ -36,6 +37,7 @@ apply_filesystem_progress_fix(storage_v180_module)
 apply_settings_v180(SettingsWindow)
 apply_transfer_monitor(App)
 apply_assistant_v180(App)
+enable_inventory_backup_handoff(App, BackupAssistant)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_scheduler_release_v183(ui_module)
