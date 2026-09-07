@@ -5,7 +5,7 @@ import keyring
 
 APP_NAME = "PCBackupVault"
 SERVICE = "PC Backup Vault"
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.3"
 
 
 def _base_dir() -> Path:
@@ -180,7 +180,6 @@ class ConfigStore:
     def get_master_key(self) -> str | None:
         return keyring.get_password(SERVICE, "master_key_v1")
 
-    # Backblaze B2 credentials stay only in the OS credential store.
     def set_b2_credentials(self, access_key_id: str, application_key: str):
         if access_key_id.strip():
             keyring.set_password(SERVICE, "b2_access_key_id", access_key_id.strip())
@@ -188,33 +187,21 @@ class ConfigStore:
             keyring.set_password(SERVICE, "b2_application_key", application_key.strip())
 
     def get_b2_credentials(self) -> tuple[str | None, str | None]:
-        return (
-            keyring.get_password(SERVICE, "b2_access_key_id"),
-            keyring.get_password(SERVICE, "b2_application_key"),
-        )
+        return (keyring.get_password(SERVICE, "b2_access_key_id"), keyring.get_password(SERVICE, "b2_application_key"))
 
     def clear_b2_credentials(self):
         for key in ("b2_access_key_id", "b2_application_key"):
-            try:
-                keyring.delete_password(SERVICE, key)
-            except Exception:
-                pass
+            try: keyring.delete_password(SERVICE, key)
+            except Exception: pass
 
     def get_b2_runtime_config(self) -> dict:
         meta = dict(self.data.get("b2") or {})
         access_key_id, application_key = self.get_b2_credentials()
         meta["access_key_id"] = access_key_id or ""
         meta["application_key"] = application_key or ""
-        meta["configured"] = bool(
-            meta.get("enabled")
-            and meta.get("bucket")
-            and meta.get("endpoint_url")
-            and access_key_id
-            and application_key
-        )
+        meta["configured"] = bool(meta.get("enabled") and meta.get("bucket") and meta.get("endpoint_url") and access_key_id and application_key)
         return meta
 
-    # KC Communication machine token stays only in the OS credential store.
     def ensure_kc_device_token(self) -> str:
         import secrets
         token = keyring.get_password(SERVICE, "kc_machine_device_token")
@@ -230,7 +217,6 @@ class ConfigStore:
         try: keyring.delete_password(SERVICE, "kc_machine_device_token")
         except Exception: pass
 
-    # Compatibility aliases for older 1.6.x code.
     def set_kc_token(self, token: str):
         if (token or "").strip(): keyring.set_password(SERVICE, "kc_machine_device_token", token.strip())
     def get_kc_token(self): return self.get_kc_device_token()
@@ -266,10 +252,8 @@ class ConfigStore:
 
     def update_plan(self, pid: str, values: dict):
         p = self.get_plan(pid)
-        if not p:
-            raise KeyError(pid)
-        p.update(values)
-        self.save()
+        if not p: raise KeyError(pid)
+        p.update(values); self.save()
 
     def delete_plan(self, pid: str):
         self.data["plans"] = [p for p in self.data.get("plans", []) if p.get("id") != pid]
