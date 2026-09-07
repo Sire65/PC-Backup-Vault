@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections import deque
 from datetime import datetime
 import tkinter as tk
+from tkinter import ttk
 
 
 def apply_heartbeat_led_v180(AppClass):
-    """Add a compact heart + LED tied to the real telemetry heartbeat."""
+    """Add a compact heart + LED tied only to real telemetry heartbeat attempts."""
 
     original_build = AppClass._build
 
@@ -54,14 +56,15 @@ def apply_heartbeat_led_v180(AppClass):
         self._heartbeat_last_success_v180 = None
         self._heartbeat_tooltip_v180 = None
         self._heartbeat_heart_after_v180 = None
+        self._heartbeat_success_history_v180 = deque(maxlen=20)
 
         def tooltip_text():
             when = getattr(self, "_heartbeat_last_at_v180", None)
             success = getattr(self, "_heartbeat_last_success_v180", None)
             if when is None:
-                return "Heartbeat: Noch kein Lebenszeichen gesendet"
+                return "Heartbeat: Noch kein Lebenszeichen gesendet\nDoppelklick: erfolgreiche Heartbeats anzeigen"
             state = "erfolgreich" if success is True else ("fehlgeschlagen" if success is False else "gesendet")
-            return f"Letzter Heartbeat: {when.strftime('%H:%M:%S')} – {state}"
+            return f"Letzter Heartbeat: {when.strftime('%H:%M:%S')} – {state}\nDoppelklick: erfolgreiche Heartbeats anzeigen"
 
         def hide_tip(event=None):
             tip = getattr(self, "_heartbeat_tooltip_v180", None)
@@ -93,12 +96,44 @@ def apply_heartbeat_led_v180(AppClass):
                 relief="solid",
                 bd=1,
                 font=("Segoe UI", 8),
+                justify="left",
             ).pack()
             self._heartbeat_tooltip_v180 = tip
+
+        def show_history(event=None):
+            hide_tip()
+            win = tk.Toplevel(self)
+            win.title("Heartbeat – letzte erfolgreiche Lebenszeichen")
+            win.geometry("520x360")
+            win.minsize(460, 280)
+            win.transient(self)
+            box = ttk.Frame(win, padding=12)
+            box.pack(fill="both", expand=True)
+            ttk.Label(box, text="Letzte erfolgreiche Heartbeats", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+            ttk.Label(
+                box,
+                text="Es werden die letzten 20 erfolgreichen Lebenszeichen dieser Programmsitzung angezeigt.",
+                wraplength=480,
+            ).pack(anchor="w", pady=(3, 9))
+            tree = ttk.Treeview(box, columns=("nr", "datum", "zeit"), show="headings", height=10)
+            tree.heading("nr", text="#")
+            tree.heading("datum", text="Datum")
+            tree.heading("zeit", text="Uhrzeit")
+            tree.column("nr", width=50, anchor="center", stretch=False)
+            tree.column("datum", width=140, anchor="center")
+            tree.column("zeit", width=120, anchor="center")
+            tree.pack(fill="both", expand=True)
+            history = list(getattr(self, "_heartbeat_success_history_v180", []) or [])
+            for idx, stamp in enumerate(reversed(history), start=1):
+                tree.insert("", "end", values=(idx, stamp.strftime("%d.%m.%Y"), stamp.strftime("%H:%M:%S")))
+            if not history:
+                tree.insert("", "end", values=("–", "Noch kein", "erfolgreicher Beat"))
+            ttk.Button(box, text="Schließen", command=win.destroy).pack(anchor="e", pady=(9, 0))
 
         for widget in (frame, heart, canvas):
             widget.bind("<Enter>", show_tip)
             widget.bind("<Leave>", hide_tip)
+            widget.bind("<Double-Button-1>", show_history)
 
     AppClass._build = _build
 
@@ -109,8 +144,13 @@ def apply_heartbeat_led_v180(AppClass):
         if canvas is None or dot is None:
             return
 
-        self._heartbeat_last_at_v180 = datetime.now()
+        now = datetime.now()
+        self._heartbeat_last_at_v180 = now
         self._heartbeat_last_success_v180 = success
+        if success is True:
+            history = getattr(self, "_heartbeat_success_history_v180", None)
+            if history is not None:
+                history.append(now)
 
         if success is True:
             state_color = "#16a34a"
@@ -120,11 +160,11 @@ def apply_heartbeat_led_v180(AppClass):
             state_color = "#2563eb"
 
         try:
-            # The LED keeps the state of the most recent real heartbeat so it remains
-            # visible between sends. The heart flashes for 2.5 seconds on every beat.
+            # LED = Zustand des letzten realen Sendeversuchs. Herz = sichtbarer Beat:
+            # Bei JEDEM tatsächlichen Heartbeat kurz rot aufblinken, danach wieder grau.
             canvas.itemconfigure(dot, fill=state_color)
             if heart is not None:
-                heart.configure(fg=state_color)
+                heart.configure(fg="#dc2626")
                 old = getattr(self, "_heartbeat_heart_after_v180", None)
                 if old:
                     try:
@@ -138,7 +178,7 @@ def apply_heartbeat_led_v180(AppClass):
                     except Exception:
                         pass
 
-                self._heartbeat_heart_after_v180 = self.after(2500, fade_heart)
+                self._heartbeat_heart_after_v180 = self.after(900, fade_heart)
         except Exception:
             pass
 
