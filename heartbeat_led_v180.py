@@ -1,15 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 import tkinter as tk
-from tkinter import ttk
 
 
 def apply_heartbeat_led_v180(AppClass):
-    """Add a small heartbeat indicator to the system status bar.
-
-    The LED flashes briefly whenever the telemetry heartbeat is attempted and
-    remains visually tied to the actual reporter callback, not to a timer in the UI.
-    """
+    """Add a compact heart + LED tied to the real telemetry heartbeat."""
 
     original_build = AppClass._build
 
@@ -33,65 +29,116 @@ def apply_heartbeat_led_v180(AppClass):
         if sysbar is None:
             return
 
-        frame = tk.Frame(sysbar, bg="#f8fafc")
-        frame.pack(side="left", padx=(2, 12))
-        tk.Label(
+        frame = tk.Frame(sysbar, bg="#f8fafc", cursor="hand2")
+        frame.pack(side="left", padx=(2, 7))
+
+        heart = tk.Label(
             frame,
             text="♥",
             bg="#f8fafc",
             fg="#64748b",
-            font=("Segoe UI Symbol", 11, "bold"),
-        ).pack(side="left", padx=(0, 3))
-
-        canvas = tk.Canvas(frame, width=18, height=20, bg="#f8fafc", highlightthickness=0)
-        canvas.pack(side="left")
-        dot = canvas.create_oval(4, 5, 14, 15, fill="#94a3b8", outline="#64748b")
-
-        label = tk.Label(
-            frame,
-            text="Heartbeat",
-            bg="#f8fafc",
-            fg="#0f172a",
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI Symbol", 12, "bold"),
+            cursor="hand2",
         )
-        label.pack(side="left", padx=(2, 0))
+        heart.pack(side="left", padx=(0, 2))
 
+        canvas = tk.Canvas(frame, width=14, height=18, bg="#f8fafc", highlightthickness=0, cursor="hand2")
+        canvas.pack(side="left")
+        dot = canvas.create_oval(3, 5, 11, 13, fill="#94a3b8", outline="#64748b")
+
+        self._heartbeat_led_frame_v180 = frame
+        self._heartbeat_led_heart_v180 = heart
         self._heartbeat_led_canvas_v180 = canvas
         self._heartbeat_led_dot_v180 = dot
-        self._heartbeat_led_label_v180 = label
-        self._heartbeat_led_after_v180 = None
+        self._heartbeat_last_at_v180 = None
+        self._heartbeat_last_success_v180 = None
+        self._heartbeat_tooltip_v180 = None
+        self._heartbeat_heart_after_v180 = None
+
+        def tooltip_text():
+            when = getattr(self, "_heartbeat_last_at_v180", None)
+            success = getattr(self, "_heartbeat_last_success_v180", None)
+            if when is None:
+                return "Heartbeat: Noch kein Lebenszeichen gesendet"
+            state = "erfolgreich" if success is True else ("fehlgeschlagen" if success is False else "gesendet")
+            return f"Letzter Heartbeat: {when.strftime('%H:%M:%S')} – {state}"
+
+        def hide_tip(event=None):
+            tip = getattr(self, "_heartbeat_tooltip_v180", None)
+            if tip is not None:
+                try:
+                    tip.destroy()
+                except Exception:
+                    pass
+            self._heartbeat_tooltip_v180 = None
+
+        def show_tip(event=None):
+            hide_tip()
+            tip = tk.Toplevel(self)
+            tip.wm_overrideredirect(True)
+            try:
+                tip.attributes("-topmost", True)
+            except Exception:
+                pass
+            x = frame.winfo_rootx() + 8
+            y = frame.winfo_rooty() + frame.winfo_height() + 5
+            tip.geometry(f"+{x}+{y}")
+            tk.Label(
+                tip,
+                text=tooltip_text(),
+                bg="#111827",
+                fg="white",
+                padx=8,
+                pady=5,
+                relief="solid",
+                bd=1,
+                font=("Segoe UI", 8),
+            ).pack()
+            self._heartbeat_tooltip_v180 = tip
+
+        for widget in (frame, heart, canvas):
+            widget.bind("<Enter>", show_tip)
+            widget.bind("<Leave>", hide_tip)
 
     AppClass._build = _build
 
     def heartbeat_pulse_v180(self, success=None):
         canvas = getattr(self, "_heartbeat_led_canvas_v180", None)
         dot = getattr(self, "_heartbeat_led_dot_v180", None)
+        heart = getattr(self, "_heartbeat_led_heart_v180", None)
         if canvas is None or dot is None:
             return
 
+        self._heartbeat_last_at_v180 = datetime.now()
+        self._heartbeat_last_success_v180 = success
+
         if success is True:
-            pulse_color = "#16a34a"
+            state_color = "#16a34a"
         elif success is False:
-            pulse_color = "#dc2626"
+            state_color = "#dc2626"
         else:
-            pulse_color = "#2563eb"
+            state_color = "#2563eb"
 
         try:
-            canvas.itemconfigure(dot, fill=pulse_color)
-            old = getattr(self, "_heartbeat_led_after_v180", None)
-            if old:
-                try:
-                    self.after_cancel(old)
-                except Exception:
-                    pass
+            # The LED keeps the state of the most recent real heartbeat so it remains
+            # visible between sends. The heart flashes for 2.5 seconds on every beat.
+            canvas.itemconfigure(dot, fill=state_color)
+            if heart is not None:
+                heart.configure(fg=state_color)
+                old = getattr(self, "_heartbeat_heart_after_v180", None)
+                if old:
+                    try:
+                        self.after_cancel(old)
+                    except Exception:
+                        pass
 
-            def fade():
-                try:
-                    canvas.itemconfigure(dot, fill="#94a3b8")
-                except Exception:
-                    pass
+                def fade_heart():
+                    try:
+                        heart.configure(fg="#64748b")
+                    except Exception:
+                        pass
 
-            self._heartbeat_led_after_v180 = self.after(1200, fade)
+                self._heartbeat_heart_after_v180 = self.after(2500, fade_heart)
         except Exception:
             pass
 
