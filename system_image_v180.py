@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import ntpath
 import os
 import subprocess
 from datetime import datetime
@@ -21,6 +22,17 @@ def _target_path(target: dict) -> str:
     return p
 
 
+def _windows_volume(path: str) -> str:
+    """Return a Windows drive designator independent of the host OS.
+
+    CI runs on Linux, where os.path.splitdrive("C:\\...") does not recognise
+    the Windows drive. ntpath deliberately applies Windows path semantics on
+    every platform, so the safety check is tested exactly like production.
+    UNC paths intentionally return their share as the drive component.
+    """
+    return str(ntpath.splitdrive(str(path or ""))[0] or "").rstrip("\\/").upper()
+
+
 def preflight_system_image(target: dict, include_volume: str | None = None) -> dict:
     path = _target_path(target)
     checks=[]
@@ -34,8 +46,8 @@ def preflight_system_image(target: dict, include_volume: str | None = None) -> d
         except Exception as e:
             checks.append(("Ziel beschreibbar", False, str(e)))
     if include_volume:
-        src = os.path.splitdrive(include_volume)[0].upper()
-        dst = os.path.splitdrive(path)[0].upper()
+        src = _windows_volume(include_volume)
+        dst = _windows_volume(path)
         if src and dst and src == dst:
             checks.append(("Quelle/Ziel getrennt", False, "Systemabbild darf nicht auf demselben Volume liegen."))
         else:
