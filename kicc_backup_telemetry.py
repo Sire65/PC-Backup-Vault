@@ -117,10 +117,11 @@ def _post(store, payload: dict) -> bool:
 
 
 class BackupTelemetryReporter:
-    def __init__(self, store, dsn_getter, interval_seconds: int = 60):
+    def __init__(self, store, dsn_getter, interval_seconds: int = 60, pulse_callback=None):
         self.store = store
         self.dsn_getter = dsn_getter
         self.interval = max(30, int(interval_seconds or 60))
+        self.pulse_callback = pulse_callback
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._unsubscribe = subscribe(self._on_status)
@@ -131,13 +132,26 @@ class BackupTelemetryReporter:
         if str(service).lower() in {"neon", "b2", "verify", "vault", "kc"}:
             self._wake.set()
 
+    def _pulse(self, success=None):
+        cb = self.pulse_callback
+        if not cb:
+            return
+        try:
+            cb(success)
+        except Exception:
+            pass
+
     def send_now(self):
         try:
             dsn = self.dsn_getter()
             if not dsn:
+                self._pulse(False)
                 return False
-            return _post(self.store, _latest_snapshot(dsn))
+            ok = _post(self.store, _latest_snapshot(dsn))
+            self._pulse(ok)
+            return ok
         except Exception:
+            self._pulse(False)
             return False
 
     def _run(self):
@@ -156,5 +170,5 @@ class BackupTelemetryReporter:
             pass
 
 
-def start_backup_telemetry(store, dsn_getter):
-    return BackupTelemetryReporter(store, dsn_getter)
+def start_backup_telemetry(store, dsn_getter, pulse_callback=None):
+    return BackupTelemetryReporter(store, dsn_getter, pulse_callback=pulse_callback)
