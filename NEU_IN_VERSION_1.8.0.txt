@@ -7,14 +7,22 @@ Neu in 1.8.0
 - Zielauswahl über Windows-Ordnerdialog: Laufwerk -> Ordner -> Unterordner frei wählbar.
 - Zusätzlich können NAS-Ziele direkt als UNC-Pfad (z. B. \\NAS\Backup\PC-Vault) hinterlegt werden.
 - Mehrere benannte Dateisystem-Ziele können gespeichert und wieder ausgewählt werden.
-- Vor dem Backup wird das Ziel auf Erreichbarkeit und Schreibbarkeit geprüft.
+- Vor dem Backup wird das Ziel auf Erreichbarkeit, freien Speicher, Schreiben/Lesen/Löschen und gefährliche Quelle-Ziel-Überlappungen geprüft.
 - Dateisystem-Backups bleiben clientseitig mit AES-256-GCM verschlüsselt; Dateinamen/Pfade stehen im Manifest nur verschlüsselt.
 - One-Touch zeigt jetzt die Anzahl vorhandener aktiver Jobs: One-Touch (1), One-Touch (4) usw.
 - Bei genau einem Job startet One-Touch sofort.
 - Bei mehreren Jobs öffnet sich eine kompakte Tabelle zur Auswahl des gewünschten Jobs.
-- Jeder One-Touch-Plan kann ein eigenes Laufwerk/Ordner/NAS-Ziel speichern.
+- Jeder One-Touch-/Scheduler-Plan kann ein eigenes Laufwerk/Ordner/NAS-Ziel speichern.
+- Job-Editor und Assistent verwenden dieselbe Planstruktur; One-Touch und Windows-Scheduler führen denselben Job aus.
+- Geführter Assistent (Zauberstab) für Backup oder Rücksicherung, Quellen, Ziel, Sicherungsart, Verifikation, Restore-Probe, One-Touch und optionalen Zeitplan.
 - Neues Live-Transferfenster im Stil des Windows-Kopierdialogs mit Fortschritt, Geschwindigkeitskurve, aktuellem Tempo, Durchschnitt, Spitze, Dateizahl, Datenmenge, Laufzeit, Restzeit und aktueller Datei.
 - Das Live-Transferfenster wird sowohl für bestehende Online-Backups als auch für die neuen Dateisystem-Backups verwendet.
+- Vollständige Offline-Rücksicherung direkt von USB, externer Platte oder NAS: Neon und Internet sind dafür nicht erforderlich.
+- Offline-Backupstände können schnell oder vollständig geprüft werden; bei vollständiger Prüfung werden Chunks entschlüsselt und die ursprüngliche Datei-SHA-256 rekonstruiert.
+- Nach einem Dateisystem-Backup kann automatisch eine echte kleine Restore-Probe in ein temporäres Verzeichnis erfolgen.
+- Aufbewahrung ist pro Job steuerbar: Mindestanzahl von Backup-Ständen plus Mindest-Aufbewahrungsdauer. Bereinigung löscht nur nicht mehr referenzierte Chunks.
+- Der bestehende TÜV wurde um Dateisystem-Ziele, letzten Backup-Stand und Offline-Restore-Probe erweitert; kein zweiter TÜV-Bereich nötig.
+- Windows-Build ist jetzt durch eine professionelle 1.8.0 Regression gesperrt: Backup/Verify/Restore, Korruptionserkennung, Preflight und Aufbewahrung müssen bestehen, bevor EXE/Setup gebaut werden.
 - KC/KICC-Lebenszeichen bleibt aktiv: Backup-Telemetrie startet weiterhin mit der Anwendung und sendet regelmäßig den technischen Zustands-Snapshot, sofern KC-Kommunikation aktiviert und gekoppelt ist.
 
 Hinweis
