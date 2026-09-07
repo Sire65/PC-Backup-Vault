@@ -18,6 +18,7 @@ from all_tests_and_run_now_v180 import apply_all_tests_and_run_now_v180
 from filesystem_progress_fix_v180 import apply_filesystem_progress_fix
 from heartbeat_led_v180 import apply_heartbeat_led_v180
 from ui_clarity_fix_v182 import apply_ui_clarity_fix_v182
+from scheduler_release_v183 import apply_scheduler_release_v183
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -31,6 +32,7 @@ apply_transfer_monitor(App)
 apply_assistant_v180(App)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
+apply_scheduler_release_v183(ui_module)
 apply_all_tests_and_run_now_v180(App, BackupAssistant, ui_module)
 apply_heartbeat_led_v180(App)
 apply_ui_clarity_fix_v182(App, ui_module)
