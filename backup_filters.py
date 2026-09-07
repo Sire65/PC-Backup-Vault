@@ -39,6 +39,7 @@ STORAGE_OPTIONS = {
     "Alle": None,
     "Backblaze B2": {"B2"},
     "Neon": {"NEON"},
+    "USB / Laufwerk / Ordner / NAS": {"FILESYSTEM"},
 }
 
 VERIFY_OPTIONS = {
