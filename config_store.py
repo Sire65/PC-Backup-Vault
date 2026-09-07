@@ -1,11 +1,10 @@
-from __future__ import annotations
 import json, os, uuid
 from pathlib import Path
 import keyring
 
 APP_NAME = "PCBackupVault"
 SERVICE = "PC Backup Vault"
-APP_VERSION = "1.8.5"
+APP_VERSION = "1.8.6"
 
 
 def _base_dir() -> Path:
