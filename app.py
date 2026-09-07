@@ -22,8 +22,9 @@ from ui_clarity_fix_v182 import apply_ui_clarity_fix_v182
 from scheduler_release_v183 import apply_scheduler_release_v183
 from release_polish_v183 import apply_release_polish_v183
 from test_window_usability_v184 import apply_test_window_usability_v184
-from restore_assistant_v186 import apply_restore_assistant_v186
+from restore_assistant_v186 import apply_restore_assistant_v186, RestoreAssistant, _file_group, _fmt_size
 from restore_path_fix_v188 import apply_restore_path_fix_v188
+from restore_filters_v189 import apply_restore_filters_v189
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -45,6 +46,7 @@ apply_release_polish_v183(App, DashboardWindow, ui_module)
 apply_test_window_usability_v184(App)
 apply_restore_assistant_v186(App, BackupAssistant)
 apply_restore_path_fix_v188()
+apply_restore_filters_v189(RestoreAssistant, _file_group, _fmt_size)
 
 
 def _show_already_running():
