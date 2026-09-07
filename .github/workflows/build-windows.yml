@@ -37,7 +37,11 @@ jobs:
 
       - name: Integrierten Quellstand kompilieren
         shell: pwsh
-        run: python -m compileall -q app.py auto_updater.py update_ui.py project_finder
+        run: python -m compileall -q .
+
+      - name: Professionelle 1.8.0 Regression
+        shell: pwsh
+        run: python -m unittest -v tests.test_professional_v180
 
       - name: PC Backup Vault bauen
         shell: pwsh
