@@ -139,7 +139,7 @@ def _local_locator(store, report: dict[str, Any]) -> dict[str, Any]:
     locator: dict[str, Any] = {"kind": "LOCAL_REPORT"}
     if backend == "STRATO HiDrive" or "hidrive" in target_label.lower():
         locator["kind"] = "HIDRIVE"
-        for account in store.data.get("cloud_targets", []) or []:
+        for account in store.data.get("cloud_accounts", []) or []:
             name = str(account.get("name") or "")
             if name and name.lower() in target_label.lower():
                 locator["account_id"] = account.get("id")
