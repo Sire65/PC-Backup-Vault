@@ -1,0 +1,9 @@
+PC Backup Vault 1.9.1
+
+- STRATO HiDrive SFTP wieder in die Cloud-Ziele integriert.
+- Zwei getrennte HiDrive-Konten können eingerichtet und als Backup-Ziele bereitgestellt werden.
+- Benutzername und Passwort bleiben lokal; Passwörter werden im Windows-Anmeldetresor gespeichert.
+- SFTP-Verbindungstest prüft Anmeldung sowie Lesen, Schreiben und Löschen.
+- HiDrive-Backups werden lokal verschlüsselt und per SFTP übertragen.
+- Produktive KC-Speichertelemetrie für NAS, HiDrive 1 und HiDrive 2 bleibt erhalten.
+- Update wird als v1.9.1 über den vorhandenen GitHub-Release-Updater bereitgestellt.
