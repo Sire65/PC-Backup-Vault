@@ -37,6 +37,7 @@ from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
 from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
+import job_archive_safe_v199  # patches archive upserts before the UI/refresh layer is imported
 from job_archive_ui_v198 import apply_job_archive_v198
 from vault_db import recent_jobs
 from config_store import APP_VERSION
