@@ -11,6 +11,7 @@ on:
       - fix/1.9.5-backup-entry-updater
       - feature/1.9.6-workbench-ui-polish
       - fix/1.9.7-workbench-close
+      - feature/1.9.8-job-archive-restore
     paths:
       - "**.py"
       - "requirements.txt"
@@ -71,6 +72,7 @@ jobs:
           python -m unittest -v tests.test_backup_workbench_v194
           python -m unittest -v tests.test_hotfix_v195
           python -m unittest -v tests.test_backup_workbench_ui_v196
+          python -m unittest -v tests.test_job_archive_v198
       - name: PC Backup Vault bauen
         shell: pwsh
         run: pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
@@ -124,4 +126,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.7: Hotfix für die Ansicht 'Sichern & Wiederherstellen'. Ein klar sichtbarer Button 'Zurück zum Hauptfenster' wurde ergänzt; außerdem schließen Windows-X, Esc und Alt+F4 die Workbench zuverlässig und bringen das Hauptfenster wieder nach vorn. Backup-, HiDrive-, NAS-, Verschlüsselungs-, Restore- und Verify-Engines bleiben unverändert."
+            --notes "1.9.8: Neues lokales SQLite-Job-Archiv als gemeinsame Historie für B2, Neon, STRATO HiDrive, NAS und Dateispeicher. Vorhandene Jobs werden übernommen und neue Sicherungsläufe automatisch archiviert. Aus der Job-Tabelle kann der exakte Sicherungslauf wiederhergestellt werden. HiDrive/Dateispeicher-Restore liest das zugehörige Manifest und prüft Chunks sowie wiederhergestellte Dateien per SHA-256; B2/Neon nutzt weiterhin den bewährten Restore-Assistenten. Backup-Transport und bestehende Sicherungsdaten bleiben unverändert."
