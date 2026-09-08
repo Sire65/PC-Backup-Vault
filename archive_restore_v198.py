@@ -24,7 +24,8 @@ def _safe_rel(original_path: str, file_name: str) -> Path:
         if not clean or value == p.drive or clean in (".", ".."):
             continue
         parts.append(clean)
-    safe_name = Path(str(file_name or "wiederhergestellt")).name
+    safe_name = PureWindowsPath(str(file_name or "wiederhergestellt")).name
+    safe_name = safe_name.replace("/", "").replace("\\", "").strip() or "wiederhergestellt"
     return Path(*parts) / safe_name
 
 
