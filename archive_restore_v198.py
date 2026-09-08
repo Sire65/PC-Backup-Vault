@@ -12,14 +12,32 @@ from storage_v180 import VAULT_DIR as FS_VAULT_DIR
 
 
 def _safe_rel(original_path: str, file_name: str) -> Path:
+    """Return a relative, traversal-safe restore path for archived Windows metadata."""
     p = PureWindowsPath(original_path or "")
     parts = []
     if p.drive:
-        parts.append(p.drive.replace(":", ""))
+        drive = p.drive.replace(":", "").replace("\\", "").replace("/", "").strip()
+        if drive:
+            parts.append(drive)
     for value in p.parts:
-        if value not in (p.drive, "\\", "/"):
-            parts.append(value)
-    return Path(*parts) / file_name
+        clean = str(value).strip("\\/")
+        if not clean or value == p.drive or clean in (".", ".."):
+            continue
+        parts.append(clean)
+    safe_name = Path(str(file_name or "wiederhergestellt")).name
+    return Path(*parts) / safe_name
+
+
+def _keep_both(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem, suffix = path.stem, path.suffix
+    index = 1
+    while True:
+        candidate = path.with_name(f"{stem} (wiederhergestellt {index}){suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def _load_local_manifest(target: dict, job_id: str) -> tuple[dict, Path]:
@@ -39,23 +57,28 @@ def _restore_manifest_local(app, manifest: dict, vault_root: Path, destination: 
     for item in manifest.get("files") or []:
         original_path = decrypt_text(key, str(item.get("path") or ""))
         name = decrypt_text(key, str(item.get("name") or ""))
-        out = destination / _safe_rel(original_path, name)
+        out = _keep_both(destination / _safe_rel(original_path, name))
         out.parent.mkdir(parents=True, exist_ok=True)
+        temp = out.with_name(out.name + ".pcbv-restore.tmp")
         digest = hashlib.sha256()
-        with out.open("wb") as dst:
-            for ref in sorted(item.get("chunks") or [], key=lambda x: int(x.get("no") or 0)):
-                payload = (vault_root / "chunks" / str(ref["file"])).read_bytes()
-                nonce, cipher = payload[:12], payload[12:]
-                if sha256_bytes(cipher) != str(ref.get("cipher_sha256") or ""):
-                    raise RuntimeError(f"Integritätsfehler im verschlüsselten Chunk von {name}.")
-                aad = f"{item['sha256']}:{int(ref.get('no') or 0)}".encode("ascii")
-                raw = decrypt_bytes(key, nonce, cipher, aad)
-                dst.write(raw)
-                digest.update(raw)
-                restored_bytes += len(raw)
-        if digest.hexdigest() != str(item.get("sha256") or ""):
-            out.unlink(missing_ok=True)
-            raise RuntimeError(f"SHA-256-Prüfung nach Wiederherstellung fehlgeschlagen: {name}")
+        try:
+            with temp.open("wb") as dst:
+                for ref in sorted(item.get("chunks") or [], key=lambda x: int(x.get("no") or 0)):
+                    payload = (vault_root / "chunks" / str(ref["file"])).read_bytes()
+                    nonce, cipher = payload[:12], payload[12:]
+                    if sha256_bytes(cipher) != str(ref.get("cipher_sha256") or ""):
+                        raise RuntimeError(f"Integritätsfehler im verschlüsselten Chunk von {name}.")
+                    aad = f"{item['sha256']}:{int(ref.get('no') or 0)}".encode("ascii")
+                    raw = decrypt_bytes(key, nonce, cipher, aad)
+                    dst.write(raw)
+                    digest.update(raw)
+                    restored_bytes += len(raw)
+            if digest.hexdigest() != str(item.get("sha256") or ""):
+                raise RuntimeError(f"SHA-256-Prüfung nach Wiederherstellung fehlgeschlagen: {name}")
+            temp.replace(out)
+        except Exception:
+            temp.unlink(missing_ok=True)
+            raise
         restored += 1
     return {"files": restored, "bytes": restored_bytes, "destination": str(destination)}
 
@@ -103,23 +126,28 @@ def _restore_manifest_sftp(app, sftp, account: dict, manifest: dict, destination
     for item in manifest.get("files") or []:
         original_path = decrypt_text(key, str(item.get("path") or ""))
         name = decrypt_text(key, str(item.get("name") or ""))
-        out = destination / _safe_rel(original_path, name)
+        out = _keep_both(destination / _safe_rel(original_path, name))
         out.parent.mkdir(parents=True, exist_ok=True)
+        temp = out.with_name(out.name + ".pcbv-restore.tmp")
         digest = hashlib.sha256()
-        with out.open("wb") as dst:
-            for ref in sorted(item.get("chunks") or [], key=lambda x: int(x.get("no") or 0)):
-                payload = _read_sftp_bytes(sftp, posixpath.join(chunks_root, str(ref["file"])))
-                nonce, cipher = payload[:12], payload[12:]
-                if sha256_bytes(cipher) != str(ref.get("cipher_sha256") or ""):
-                    raise RuntimeError(f"Integritätsfehler im HiDrive-Chunk von {name}.")
-                aad = f"{item['sha256']}:{int(ref.get('no') or 0)}".encode("ascii")
-                raw = decrypt_bytes(key, nonce, cipher, aad)
-                dst.write(raw)
-                digest.update(raw)
-                restored_bytes += len(raw)
-        if digest.hexdigest() != str(item.get("sha256") or ""):
-            out.unlink(missing_ok=True)
-            raise RuntimeError(f"SHA-256-Prüfung nach HiDrive-Wiederherstellung fehlgeschlagen: {name}")
+        try:
+            with temp.open("wb") as dst:
+                for ref in sorted(item.get("chunks") or [], key=lambda x: int(x.get("no") or 0)):
+                    payload = _read_sftp_bytes(sftp, posixpath.join(chunks_root, str(ref["file"])))
+                    nonce, cipher = payload[:12], payload[12:]
+                    if sha256_bytes(cipher) != str(ref.get("cipher_sha256") or ""):
+                        raise RuntimeError(f"Integritätsfehler im HiDrive-Chunk von {name}.")
+                    aad = f"{item['sha256']}:{int(ref.get('no') or 0)}".encode("ascii")
+                    raw = decrypt_bytes(key, nonce, cipher, aad)
+                    dst.write(raw)
+                    digest.update(raw)
+                    restored_bytes += len(raw)
+            if digest.hexdigest() != str(item.get("sha256") or ""):
+                raise RuntimeError(f"SHA-256-Prüfung nach HiDrive-Wiederherstellung fehlgeschlagen: {name}")
+            temp.replace(out)
+        except Exception:
+            temp.unlink(missing_ok=True)
+            raise
         restored += 1
     return {"files": restored, "bytes": restored_bytes, "destination": str(destination)}
 
