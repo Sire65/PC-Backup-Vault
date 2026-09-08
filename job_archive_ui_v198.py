@@ -20,6 +20,14 @@ def _fmt_dt(value) -> str:
         return str(value)
 
 
+def _refresh_archive_background(app, recent_jobs_func):
+    """Best-effort metadata sync; never blocks or changes a backup result."""
+    try:
+        refresh_archive(app.store, app.active_dsn(), recent_jobs_func)
+    except Exception:
+        pass
+
+
 class JobArchiveWindow(tk.Toplevel):
     def __init__(self, app, recent_jobs_func):
         super().__init__(app)
@@ -170,7 +178,38 @@ def apply_job_archive_v198(AppClass, RestoreAssistantClass, WorkbenchClass, rece
             ttk.Button(parent, text="🗄 Job-Archiv", command=self.open_job_archive).pack(side="left", padx=(0, 8), before=self.btn_backup)
         except Exception:
             pass
+        try:
+            self.after(1200, lambda: threading.Thread(
+                target=_refresh_archive_background,
+                args=(self, recent_jobs_func),
+                name="pbv-job-archive-startup",
+                daemon=True,
+            ).start())
+        except Exception:
+            pass
     AppClass._build = app_build
+
+    # Every completed/failed backup event triggers a metadata-only archive refresh in
+    # a daemon thread. The archive can never turn a successful backup into a failure.
+    original_notify = AppClass.notify_kc
+    archive_events = {
+        "backup_success", "backup_failed", "backup_cancelled", "backup_interrupted",
+        "backup_resumed", "verify_failed", "restore_test_failed",
+    }
+    def notify_kc(self, event, title, message, severity="INFO", details=None):
+        result = original_notify(self, event, title, message, severity, details)
+        if str(event) in archive_events:
+            try:
+                threading.Thread(
+                    target=_refresh_archive_background,
+                    args=(self, recent_jobs_func),
+                    name="pbv-job-archive-event",
+                    daemon=True,
+                ).start()
+            except Exception:
+                pass
+        return result
+    AppClass.notify_kc = notify_kc
 
     original_load_records = RestoreAssistantClass._load_records
     def load_records(self):
@@ -184,13 +223,6 @@ def apply_job_archive_v198(AppClass, RestoreAssistantClass, WorkbenchClass, rece
         self.app._archive_restore_job_id = None
     RestoreAssistantClass._load_records = load_records
 
-    original_workbench_build = WorkbenchClass._build
-    def workbench_build(self):
-        original_workbench_build(self)
-        try:
-            ttk.Button(self, text="🗄 Job-Archiv", command=lambda: JobArchiveWindow(self.app, recent_jobs_func)).place(relx=0.985, y=18, anchor="ne")
-        except Exception:
-            pass
-    WorkbenchClass._build = workbench_build
-
+    # Keep the already polished 1.9.7 Workbench untouched. The archive is opened
+    # from the main window so no new overlay/close-path is introduced there.
     AppClass._job_archive_v198 = True
