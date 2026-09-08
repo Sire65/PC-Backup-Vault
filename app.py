@@ -31,6 +31,7 @@ import cloud_targets_v191 as cloud_targets_module
 import cloud_targets_ui_v191 as cloud_targets_ui_module
 from cloud_targets_ui_v191 import apply_cloud_targets_v191
 from hidrive_integration_v192 import apply_hidrive_sftp_v192
+from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -45,6 +46,7 @@ apply_assistant_v180(App)
 enable_inventory_backup_handoff(App, BackupAssistant)
 apply_cloud_targets_v191(SettingsWindow, BackupAssistant, storage_v180_module)
 apply_hidrive_sftp_v192(App, cloud_targets_module, cloud_targets_ui_module, storage_v180_module, plan_runner_module)
+apply_cloud_target_activation_v192(cloud_targets_ui_module)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_scheduler_release_v183(ui_module)
