@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -39,7 +40,8 @@ def target_summary(target: dict[str, Any] | None, result: dict[str, Any] | None 
     name = str(target.get("name") or result.get("target_name") or "Backup-Ziel").strip()
     kind = str(target.get("kind") or "").upper()
     if provider == "STRATO_HIDRIVE" or kind == "CLOUD-SFTP":
-        label = name if "hidrive" in name.lower() else f"STRATO HiDrive · {name}"
+        clean_name = name.replace("Cloud · ", "", 1).strip()
+        label = clean_name if "hidrive" in clean_name.lower() else f"STRATO HiDrive · {clean_name}"
         backend = "STRATO HiDrive"
     elif kind == "NAS":
         label, backend = name, "NAS"
@@ -62,8 +64,10 @@ def enrich_result(result: dict[str, Any], paths: Iterable[Path], target: dict[st
 
 def report_lines(result: dict[str, Any]) -> list[str]:
     r = result
+    verification = (r.get("verification") or {}).get("status", "noch nicht durchgeführt")
+    selftest = (r.get("selftest") or {}).get("status", "noch nicht durchgeführt")
     return [
-        "PC BACKUP VAULT – JOB-REPORT",
+        "PC BACKUP VAULT – BACKUP-REPORT",
         "=" * 64,
         f"Job-ID: {r.get('job_id') or '–'}",
         f"App-Version: {r.get('app_version') or APP_VERSION}",
@@ -73,24 +77,102 @@ def report_lines(result: dict[str, Any]) -> list[str]:
         f"Quelle → Ziel: {r.get('source_to_target') or '–'}",
         f"Speicherart: {r.get('backend_label') or '–'}",
         f"Transport: {r.get('transport_label') or '–'}",
+        f"Plan: {r.get('plan_name') or '–'}",
+        "",
+        "UMFANG",
         f"Dateien: {int(r.get('files') or r.get('file_count') or 0)}",
         f"Original-Datenmenge: {human_size(r.get('original_bytes'))}",
         f"Neu gespeichert/übertragen: {human_size(r.get('stored_bytes'))}",
+        "",
+        "ZEIT / LEISTUNG",
+        f"Aktive Dauer: {float(r.get('duration_seconds') or 0):.1f} s",
         f"Ø Geschwindigkeit: {human_size(r.get('avg_speed_bps'))}/s",
         f"Transfer-Spitze: {human_size(r.get('peak_transfer_bps'))}/s",
-        f"Verifizierung: {(r.get('verification') or {}).get('status', 'noch nicht durchgeführt')}",
-        f"Restore-Probe: {(r.get('selftest') or {}).get('status', 'noch nicht durchgeführt')}",
+        "",
+        "VERIFIZIERUNG",
+        f"Verifizierung: {verification}",
+        f"Restore-Probe: {selftest}",
+        "",
         f"Report erzeugt: {r.get('reported_at') or datetime.now().astimezone().isoformat(timespec='seconds')}",
     ]
+
+
+def report_text(result: dict[str, Any]) -> str:
+    return "\n".join(report_lines(result)) + "\n"
+
+
+def reports_dir(store) -> Path:
+    return Path(store.path).parent / "reports"
 
 
 def persist_local_job_report(store, result: dict[str, Any], paths: Iterable[Path], target: dict[str, Any] | None = None) -> dict[str, Any]:
     """Persist a credential-free local audit record for every filesystem/HiDrive job."""
     r = enrich_result(result, paths, target)
-    base = Path(store.path).parent / "reports"
+    base = reports_dir(store)
     base.mkdir(parents=True, exist_ok=True)
     job_id = str(r.get("job_id") or "unknown")
     safe = {k: v for k, v in r.items() if k not in {"target", "cloud_account_id"}}
     (base / f"{job_id}.json").write_text(json.dumps(safe, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    (base / f"{job_id}.txt").write_text("\n".join(report_lines(safe)) + "\n", encoding="utf-8")
+    (base / f"{job_id}.txt").write_text(report_text(safe), encoding="utf-8")
     return r
+
+
+def load_local_job_report(store, job_id: str) -> dict[str, Any] | None:
+    path = reports_dir(store) / f"{str(job_id)}.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def list_local_job_reports(store) -> list[dict[str, Any]]:
+    base = reports_dir(store)
+    if not base.exists():
+        return []
+    rows = []
+    for path in base.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("job_id"):
+                rows.append(data)
+        except Exception:
+            continue
+    rows.sort(key=lambda r: str(r.get("reported_at") or ""), reverse=True)
+    return rows
+
+
+def latest_local_job_report(store) -> dict[str, Any] | None:
+    rows = list_local_job_reports(store)
+    return rows[0] if rows else None
+
+
+def save_report_txt(result: dict[str, Any], path: str | Path):
+    Path(path).write_text(report_text(result), encoding="utf-8")
+
+
+def save_report_csv(result: dict[str, Any], path: str | Path):
+    fields = {
+        "job_id": result.get("job_id"),
+        "app_version": result.get("app_version"),
+        "status": result.get("status"),
+        "quelle": result.get("source_label"),
+        "ziel": result.get("target_label"),
+        "quelle_zu_ziel": result.get("source_to_target"),
+        "speicherart": result.get("backend_label"),
+        "transport": result.get("transport_label"),
+        "dateien": result.get("files") or result.get("file_count"),
+        "original_bytes": result.get("original_bytes"),
+        "stored_bytes": result.get("stored_bytes"),
+        "duration_seconds": result.get("duration_seconds"),
+        "avg_speed_bps": result.get("avg_speed_bps"),
+        "peak_transfer_bps": result.get("peak_transfer_bps"),
+        "reported_at": result.get("reported_at"),
+    }
+    with Path(path).open("w", encoding="utf-8-sig", newline="") as fh:
+        writer = csv.writer(fh, delimiter=";")
+        writer.writerow(["Feld", "Wert"])
+        for key, value in fields.items():
+            writer.writerow([key, "" if value is None else str(value)])
