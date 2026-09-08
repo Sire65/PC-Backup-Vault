@@ -29,7 +29,8 @@ def source_summary(paths: Iterable[Path]) -> dict[str, Any]:
         label = ", ".join(names)
     else:
         label = f"{', '.join(names[:3])} + {len(names)-3} weitere"
-    return {"source_label": label, "source_count": len(rows)}
+    parents = {str(p.parent) for p in rows}
+    return {"source_label": label, "source_count": len(rows), "directory_count": len(parents)}
 
 
 def target_summary(target: dict[str, Any] | None, result: dict[str, Any] | None = None) -> dict[str, str]:
@@ -81,6 +82,7 @@ def report_lines(result: dict[str, Any]) -> list[str]:
         "",
         "UMFANG",
         f"Dateien: {int(r.get('files') or r.get('file_count') or 0)}",
+        f"Verzeichnisse: {int(r.get('directory_count') or 0)}",
         f"Original-Datenmenge: {human_size(r.get('original_bytes'))}",
         f"Neu gespeichert/übertragen: {human_size(r.get('stored_bytes'))}",
         "",
@@ -164,6 +166,7 @@ def save_report_csv(result: dict[str, Any], path: str | Path):
         "speicherart": result.get("backend_label"),
         "transport": result.get("transport_label"),
         "dateien": result.get("files") or result.get("file_count"),
+        "verzeichnisse": result.get("directory_count"),
         "original_bytes": result.get("original_bytes"),
         "stored_bytes": result.get("stored_bytes"),
         "duration_seconds": result.get("duration_seconds"),
