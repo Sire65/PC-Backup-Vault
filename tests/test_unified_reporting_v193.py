@@ -28,6 +28,7 @@ class UnifiedReportingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             store = DummyStore(td)
             r = persist_local_job_report(
+                store,
                 {"job_id":"job-2","status":"SUCCESS","provider":"STRATO_HIDRIVE","transport":"SFTP","files":1,"cloud_account_id":"private-account-id","target":"sftp://server/private"},
                 [Path("test.txt")],
                 {"name":"Cloud · Strato_sire25","kind":"CLOUD-SFTP","path":"/users/sire25/private","cloud_account_id":"private-account-id"},
