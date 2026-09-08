@@ -59,7 +59,7 @@ def enrich_result(result: dict[str, Any], paths: Iterable[Path], target: dict[st
     out.update(target_summary(target, out))
     out["app_version"] = out.get("app_version") or APP_VERSION
     out["source_to_target"] = f"{out['source_label']} → {out['target_label']}"
-    out["reported_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    out["reported_at"] = datetime.now().astimezone().isoformat(timespec="microseconds")
     return out
 
 
