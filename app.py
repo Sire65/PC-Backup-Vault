@@ -34,7 +34,9 @@ import hidrive_integration_v192 as hidrive_integration_module
 from hidrive_integration_v192 import apply_hidrive_sftp_v192
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
-from backup_workbench_v194 import apply_backup_workbench_v194
+from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
+from hotfix_v195 import apply_hotfix_v195
+from config_store import APP_VERSION
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
 
@@ -63,6 +65,7 @@ apply_restore_assistant_v186(App, BackupAssistant)
 apply_restore_path_fix_v188()
 apply_restore_filters_v189(RestoreAssistant, _file_group, _fmt_size)
 apply_backup_workbench_v194(App, storage_v180_module)
+apply_hotfix_v195(App, BackupWorkbench, APP_VERSION)
 
 
 def _show_already_running():
