@@ -15,16 +15,11 @@ class BackupWorkbenchUiV196Tests(unittest.TestCase):
 
     def test_ui_patch_is_idempotent_and_engine_methods_untouched(self):
         class DummyWorkbench:
-            def _build(self):
-                return "old"
-            def _media_rows(self):
-                return []
-            def _media_selected(self):
-                return None
-            def start_backup(self):
-                return "engine"
-            def restore(self):
-                return "restore"
+            def _build(self): return "old"
+            def _media_rows(self): return []
+            def _media_selected(self): return None
+            def start_backup(self): return "engine"
+            def restore(self): return "restore"
 
         start = DummyWorkbench.start_backup
         restore = DummyWorkbench.restore
@@ -35,6 +30,29 @@ class BackupWorkbenchUiV196Tests(unittest.TestCase):
         self.assertIs(DummyWorkbench.start_backup, start)
         self.assertIs(DummyWorkbench.restore, restore)
         self.assertTrue(DummyWorkbench._ui_v196)
+        self.assertTrue(callable(DummyWorkbench._return_to_main_v197))
+
+    def test_return_to_main_closes_workbench_and_restores_main_focus(self):
+        class App:
+            def __init__(self): self.calls = []
+            def deiconify(self): self.calls.append("deiconify")
+            def lift(self): self.calls.append("lift")
+            def focus_force(self): self.calls.append("focus")
+
+        class DummyWorkbench:
+            def _build(self): pass
+            def _media_rows(self): return []
+            def _media_selected(self): pass
+            def _close(self): self.closed = True
+
+        apply_backup_workbench_ui_v196(DummyWorkbench)
+        obj = DummyWorkbench()
+        obj.app = App()
+        obj.closed = False
+        result = obj._return_to_main_v197()
+        self.assertTrue(obj.closed)
+        self.assertEqual(obj.app.calls, ["deiconify", "lift", "focus"])
+        self.assertEqual(result, "break")
 
 
 if __name__ == "__main__":
