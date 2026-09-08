@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ntpath
 from pathlib import Path, PureWindowsPath
 
 import restore_assistant_v186 as restore_module
@@ -33,7 +34,10 @@ def safe_relative_restore_path(original_path: str, file_name: str) -> Path:
             continue
         parts.append(clean)
 
-    safe_name = Path(str(file_name or "Datei")).name
+    # Treat filenames as Windows names even when tests run on Linux. Path.name
+    # alone does not strip backslash-separated traversal there.
+    raw_name = str(file_name or "Datei").replace("/", "\\")
+    safe_name = ntpath.basename(raw_name).strip("\\/")
     if not safe_name or safe_name in {".", ".."}:
         safe_name = "Datei"
     rel = Path(*parts) / safe_name
