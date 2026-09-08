@@ -41,6 +41,20 @@ def _keep_both(path: Path) -> Path:
         index += 1
 
 
+def _emit(progress, **info):
+    if not progress:
+        return
+    try:
+        progress(dict(info))
+    except Exception:
+        # Progress reporting must never break the restore engine.
+        pass
+
+
+def _manifest_total_bytes(manifest: dict) -> int:
+    return sum(max(0, int(item.get("original_size") or 0)) for item in (manifest.get("files") or []))
+
+
 def _load_local_manifest(target: dict, job_id: str) -> tuple[dict, Path]:
     root = Path(str(target.get("path") or "")) / FS_VAULT_DIR
     path = root / "jobs" / f"{job_id}.json"
@@ -49,15 +63,22 @@ def _load_local_manifest(target: dict, job_id: str) -> tuple[dict, Path]:
     return json.loads(path.read_text(encoding="utf-8")), root
 
 
-def _restore_manifest_local(app, manifest: dict, vault_root: Path, destination: Path) -> dict:
+def _restore_manifest_local(app, manifest: dict, vault_root: Path, destination: Path, progress=None) -> dict:
     key = app.master_key()
     if not key:
         raise RuntimeError("Wiederherstellungsschlüssel ist nicht verfügbar.")
+    files = list(manifest.get("files") or [])
+    total_files = len(files)
+    total_bytes = _manifest_total_bytes(manifest)
     restored = 0
     restored_bytes = 0
-    for item in manifest.get("files") or []:
+    _emit(progress, phase="Manifest geladen · Wiederherstellung startet", files_done=0, files_total=total_files,
+          bytes_done=0, bytes_total=total_bytes, current_file="–")
+    for file_no, item in enumerate(files, start=1):
         original_path = decrypt_text(key, str(item.get("path") or ""))
         name = decrypt_text(key, str(item.get("name") or ""))
+        _emit(progress, phase="Datei wird wiederhergestellt", files_done=restored, files_total=total_files,
+              bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
         out = _keep_both(destination / _safe_rel(original_path, name))
         out.parent.mkdir(parents=True, exist_ok=True)
         temp = out.with_name(out.name + ".pcbv-restore.tmp")
@@ -74,6 +95,11 @@ def _restore_manifest_local(app, manifest: dict, vault_root: Path, destination: 
                     dst.write(raw)
                     digest.update(raw)
                     restored_bytes += len(raw)
+                    _emit(progress, phase="Daten lesen · entschlüsseln · schreiben", files_done=restored,
+                          files_total=total_files, bytes_done=restored_bytes, bytes_total=total_bytes,
+                          current_file=name)
+            _emit(progress, phase="SHA-256 der Datei wird geprüft", files_done=restored, files_total=total_files,
+                  bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
             if digest.hexdigest() != str(item.get("sha256") or ""):
                 raise RuntimeError(f"SHA-256-Prüfung nach Wiederherstellung fehlgeschlagen: {name}")
             temp.replace(out)
@@ -81,6 +107,10 @@ def _restore_manifest_local(app, manifest: dict, vault_root: Path, destination: 
             temp.unlink(missing_ok=True)
             raise
         restored += 1
+        _emit(progress, phase=f"Datei {file_no} von {total_files} abgeschlossen", files_done=restored,
+              files_total=total_files, bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
+    _emit(progress, phase="Wiederherstellung abgeschlossen", files_done=restored, files_total=total_files,
+          bytes_done=restored_bytes, bytes_total=total_bytes, current_file="–")
     return {"files": restored, "bytes": restored_bytes, "destination": str(destination)}
 
 
@@ -117,16 +147,23 @@ def _read_sftp_bytes(sftp, path: str) -> bytes:
         return fh.read()
 
 
-def _restore_manifest_sftp(app, sftp, account: dict, manifest: dict, destination: Path) -> dict:
+def _restore_manifest_sftp(app, sftp, account: dict, manifest: dict, destination: Path, progress=None) -> dict:
     key = app.master_key()
     if not key:
         raise RuntimeError("Wiederherstellungsschlüssel ist nicht verfügbar.")
     chunks_root = posixpath.join(_root(account), HIDRIVE_VAULT_DIR, "chunks")
+    files = list(manifest.get("files") or [])
+    total_files = len(files)
+    total_bytes = _manifest_total_bytes(manifest)
     restored = 0
     restored_bytes = 0
-    for item in manifest.get("files") or []:
+    _emit(progress, phase="HiDrive-Manifest geladen · Wiederherstellung startet", files_done=0,
+          files_total=total_files, bytes_done=0, bytes_total=total_bytes, current_file="–")
+    for file_no, item in enumerate(files, start=1):
         original_path = decrypt_text(key, str(item.get("path") or ""))
         name = decrypt_text(key, str(item.get("name") or ""))
+        _emit(progress, phase="HiDrive-Datei wird wiederhergestellt", files_done=restored,
+              files_total=total_files, bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
         out = _keep_both(destination / _safe_rel(original_path, name))
         out.parent.mkdir(parents=True, exist_ok=True)
         temp = out.with_name(out.name + ".pcbv-restore.tmp")
@@ -143,6 +180,11 @@ def _restore_manifest_sftp(app, sftp, account: dict, manifest: dict, destination
                     dst.write(raw)
                     digest.update(raw)
                     restored_bytes += len(raw)
+                    _emit(progress, phase="HiDrive laden · entschlüsseln · schreiben", files_done=restored,
+                          files_total=total_files, bytes_done=restored_bytes, bytes_total=total_bytes,
+                          current_file=name)
+            _emit(progress, phase="SHA-256 der Datei wird geprüft", files_done=restored, files_total=total_files,
+                  bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
             if digest.hexdigest() != str(item.get("sha256") or ""):
                 raise RuntimeError(f"SHA-256-Prüfung nach HiDrive-Wiederherstellung fehlgeschlagen: {name}")
             temp.replace(out)
@@ -150,10 +192,14 @@ def _restore_manifest_sftp(app, sftp, account: dict, manifest: dict, destination
             temp.unlink(missing_ok=True)
             raise
         restored += 1
+        _emit(progress, phase=f"Datei {file_no} von {total_files} abgeschlossen", files_done=restored,
+              files_total=total_files, bytes_done=restored_bytes, bytes_total=total_bytes, current_file=name)
+    _emit(progress, phase="Wiederherstellung abgeschlossen", files_done=restored, files_total=total_files,
+          bytes_done=restored_bytes, bytes_total=total_bytes, current_file="–")
     return {"files": restored, "bytes": restored_bytes, "destination": str(destination)}
 
 
-def restore_archived_job(app, job_id: str, destination: str | Path) -> dict:
+def restore_archived_job(app, job_id: str, destination: str | Path, progress=None) -> dict:
     job = get_job(app.store, job_id)
     if not job:
         raise KeyError(f"Job {job_id} ist nicht im lokalen Archiv vorhanden.")
@@ -162,23 +208,35 @@ def restore_archived_job(app, job_id: str, destination: str | Path) -> dict:
     backend = str(job.get("backend_label") or "").lower()
     locator = job.get("locator") or {}
     kind = str(locator.get("kind") or "").upper()
+    _emit(progress, phase="Wiederherstellung wird vorbereitet", files_done=0,
+          files_total=int(job.get("file_count") or 0), bytes_done=0,
+          bytes_total=int(job.get("original_bytes") or 0), current_file="–")
     try:
         if kind == "HIDRIVE" or "hidrive" in backend or "hidrive" in str(job.get("target_label") or "").lower():
             account = _match_hidrive_account(app.store, job)
             if not account:
                 raise RuntimeError("Das zu diesem Archiv-Job gehörende HiDrive-Konto ist nicht mehr konfiguriert.")
+            _emit(progress, phase="Verbindung zu STRATO HiDrive wird aufgebaut", files_done=0,
+                  files_total=int(job.get("file_count") or 0), bytes_done=0,
+                  bytes_total=int(job.get("original_bytes") or 0), current_file="–")
             with sftp_connection(app.store, str(account.get("id"))) as (sftp, live_account):
                 manifest_path = posixpath.join(_root(live_account), HIDRIVE_VAULT_DIR, "jobs", f"{job_id}.json")
+                _emit(progress, phase="Job-Manifest wird von HiDrive geladen", files_done=0,
+                      files_total=int(job.get("file_count") or 0), bytes_done=0,
+                      bytes_total=int(job.get("original_bytes") or 0), current_file="–")
                 manifest = json.loads(_read_sftp_bytes(sftp, manifest_path).decode("utf-8"))
                 index_manifest(app.store, job_id, manifest, "STRATO HiDrive", job_id)
-                result = _restore_manifest_sftp(app, sftp, live_account, manifest, destination)
+                result = _restore_manifest_sftp(app, sftp, live_account, manifest, destination, progress)
         elif kind == "FILESYSTEM" or str(job.get("payload_target") or "").upper() == "FILESYSTEM":
             target = _match_filesystem_target(app.store, job)
             if not target:
                 raise RuntimeError("Das zu diesem Archiv-Job gehörende Laufwerk/NAS-Ziel ist nicht mehr konfiguriert.")
+            _emit(progress, phase="Job-Manifest wird vom Sicherungsziel geladen", files_done=0,
+                  files_total=int(job.get("file_count") or 0), bytes_done=0,
+                  bytes_total=int(job.get("original_bytes") or 0), current_file="–")
             manifest, vault_root = _load_local_manifest(target, job_id)
             index_manifest(app.store, job_id, manifest, job.get("backend_label") or "FILESYSTEM", job_id)
-            result = _restore_manifest_local(app, manifest, vault_root, destination)
+            result = _restore_manifest_local(app, manifest, vault_root, destination, progress)
         else:
             raise RuntimeError("DATABASE_RESTORE")
     except Exception as exc:
