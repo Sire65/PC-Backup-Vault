@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import ntpath
 import os
 import subprocess
 from datetime import datetime
@@ -34,8 +35,8 @@ def preflight_system_image(target: dict, include_volume: str | None = None) -> d
         except Exception as e:
             checks.append(("Ziel beschreibbar", False, str(e)))
     if include_volume:
-        src = os.path.splitdrive(include_volume)[0].upper()
-        dst = os.path.splitdrive(path)[0].upper()
+        src = ntpath.splitdrive(include_volume)[0].upper()
+        dst = ntpath.splitdrive(path)[0].upper()
         if src and dst and src == dst:
             checks.append(("Quelle/Ziel getrennt", False, "Systemabbild darf nicht auf demselben Volume liegen."))
         else:
