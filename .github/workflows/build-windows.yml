@@ -10,6 +10,7 @@ on:
       - feature/1.9.4-backup-workbench
       - fix/1.9.5-backup-entry-updater
       - feature/1.9.6-workbench-ui-polish
+      - fix/1.9.7-workbench-close
     paths:
       - "**.py"
       - "requirements.txt"
@@ -123,4 +124,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.6: Bedienoberfläche 'Sichern & Wiederherstellen' logisch neu angeordnet: gleichwertige Quelle-/Zielbereiche, klare Schrittfolge, größere Backup-/Statuszone, zusätzliche echte Optionen und Sicherheitsfunktionen als klar gekennzeichnete Pflichtmerkmale. Interne HiDrive-Home-Pfade werden in der normalen Oberfläche nicht mehr angezeigt. Backup-, HiDrive-, NAS-, Verschlüsselungs-, Restore- und Verify-Engines bleiben unverändert."
+            --notes "1.9.7: Hotfix für die Ansicht 'Sichern & Wiederherstellen'. Ein klar sichtbarer Button 'Zurück zum Hauptfenster' wurde ergänzt; außerdem schließen Windows-X, Esc und Alt+F4 die Workbench zuverlässig und bringen das Hauptfenster wieder nach vorn. Backup-, HiDrive-, NAS-, Verschlüsselungs-, Restore- und Verify-Engines bleiben unverändert."
