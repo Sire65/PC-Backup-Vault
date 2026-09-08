@@ -1,10 +1,17 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from archive_restore_v198 import _safe_rel
-from job_archive_v198 import archive_count, get_job, list_jobs, mark_restore, upsert_job, _local_locator
+from job_archive_v198 import (
+    _local_locator,
+    archive_count,
+    get_job,
+    ingest_neon_jobs,
+    list_jobs,
+    mark_restore,
+    upsert_job,
+)
 
 
 class DummyStore:
@@ -51,8 +58,23 @@ class JobArchiveV198Tests(unittest.TestCase):
                 upsert_job(store, {"job_id": jid, "status": "SUCCESS", "reported_at": stamp, "origin": "TEST"})
             self.assertEqual([r["job_id"] for r in list_jobs(store)], ["new", "old"])
 
+    def test_neon_and_b2_jobs_enter_same_archive(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = DummyStore(td)
+            rows = [
+                ("b2-job", "2026-09-08T19:00:00+02:00", "2026-09-08T19:01:00+02:00", "SUCCESS", 2,
+                 2000, 1000, 0, "", "MANUAL", None, "INCREMENTAL", 2, 2, 0, "B2", 1, 60, 30, 50, 0, 1, 1500),
+                ("neon-job", "2026-09-08T18:00:00+02:00", "2026-09-08T18:01:00+02:00", "SUCCESS", 1,
+                 500, 500, 0, "", "MANUAL", None, "FULL", 1, 1, 0, "NEON", 1, 60, 8, 10, 0, 0, 500),
+            ]
+            count = ingest_neon_jobs(store, "dsn", lambda _dsn, _limit: rows)
+            self.assertEqual(count, 2)
+            jobs = {r["job_id"]: r for r in list_jobs(store)}
+            self.assertEqual(jobs["b2-job"]["target_label"], "Backblaze B2 + Neon-Core")
+            self.assertEqual(jobs["neon-job"]["backend_label"], "Neon")
+
     def test_restore_path_cannot_escape_destination(self):
-        rel = _safe_rel(r"L:\\Köcheclub\\Unterordner", "Datei.docx")
+        rel = _safe_rel(r"L:\\Köcheclub\\..\\..\\Windows\\System32", r"..\\Datei.docx")
         self.assertFalse(rel.is_absolute())
         self.assertNotIn("..", rel.parts)
         self.assertEqual(rel.name, "Datei.docx")
