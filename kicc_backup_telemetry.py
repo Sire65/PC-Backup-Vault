@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from config_store import APP_VERSION
 from status_bus import subscribe
+from storage_health_v193 import collect_storage_health
 from vault_db import recent_jobs, recent_restore_tests, recent_verifications
 
 TELEMETRY_ENDPOINT = "https://ptblnpiroqftcvlsrhac.supabase.co/functions/v1/kc-backup-telemetry-machine"
@@ -88,6 +89,20 @@ def _latest_snapshot(dsn: str) -> dict:
     }
 
 
+def _with_storage_targets(store, payload: dict) -> dict:
+    out = dict(payload)
+    try:
+        out["storageTargets"] = collect_storage_health(store)
+    except Exception:
+        now = datetime.now(timezone.utc).isoformat()
+        out["storageTargets"] = [
+            {"id": "nas_backup", "name": "NAS Backup", "kind": "nas", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
+            {"id": "hidrive_1", "name": "HiDrive 1", "kind": "hidrive", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
+            {"id": "hidrive_2", "name": "HiDrive 2", "kind": "hidrive", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
+        ]
+    return out
+
+
 def _post(store, payload: dict) -> bool:
     cfg = dict(store.data.get("kc_communication") or {})
     if not cfg.get("enabled"):
@@ -147,7 +162,8 @@ class BackupTelemetryReporter:
             if not dsn:
                 self._pulse(False)
                 return False
-            ok = _post(self.store, _latest_snapshot(dsn))
+            payload = _with_storage_targets(self.store, _latest_snapshot(dsn))
+            ok = _post(self.store, payload)
             self._pulse(ok)
             return ok
         except Exception:
