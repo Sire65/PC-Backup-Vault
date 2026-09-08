@@ -24,6 +24,27 @@ def apply_backup_workbench_ui_v196(WorkbenchClass):
     original_media_rows = WorkbenchClass._media_rows
     original_media_selected = WorkbenchClass._media_selected
 
+    def _return_to_main(self, _event=None):
+        """Close only the workbench and reliably return focus to the main window."""
+        try:
+            self._close()
+        finally:
+            app = getattr(self, "app", None)
+            if app is not None:
+                try:
+                    app.deiconify()
+                except Exception:
+                    pass
+                try:
+                    app.lift()
+                except Exception:
+                    pass
+                try:
+                    app.focus_force()
+                except Exception:
+                    pass
+        return "break"
+
     def _build(self):
         self.configure(padx=0, pady=0)
         try:
@@ -31,6 +52,9 @@ def apply_backup_workbench_ui_v196(WorkbenchClass):
         except Exception:
             self.geometry("1440x900")
         self.minsize(1180, 720)
+        self.protocol("WM_DELETE_WINDOW", self._return_to_main_v197)
+        self.bind("<Escape>", self._return_to_main_v197)
+        self.bind("<Alt-F4>", self._return_to_main_v197)
 
         shell = ttk.Frame(self, padding=(18, 14, 18, 14))
         shell.pack(fill="both", expand=True)
@@ -43,6 +67,7 @@ def apply_backup_workbench_ui_v196(WorkbenchClass):
         head.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
         ttk.Label(head, text="Sichern & Wiederherstellen", font=("Segoe UI", 20, "bold")).pack(side="left")
         ttk.Label(head, text="  1 Quelle wählen   →   2 Ziel wählen   →   3 Optionen prüfen   →   Backup starten", font=("Segoe UI", 10)).pack(side="left", padx=(18, 0))
+        ttk.Button(head, text="← Zurück zum Hauptfenster", command=self._return_to_main_v197).pack(side="right")
 
         left = ttk.LabelFrame(shell, text="1 · QUELLE", padding=10)
         left.grid(row=1, column=0, sticky="nsew")
@@ -175,5 +200,6 @@ def apply_backup_workbench_ui_v196(WorkbenchClass):
     WorkbenchClass._build = _build
     WorkbenchClass._media_rows = _media_rows
     WorkbenchClass._media_selected = _media_selected
+    WorkbenchClass._return_to_main_v197 = _return_to_main
     WorkbenchClass._ui_v196 = True
     return WorkbenchClass
