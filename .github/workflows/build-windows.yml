@@ -7,6 +7,7 @@ on:
       - main
       - fix/hidrive-target-activation-v192
       - feature/1.9.3-unified-reporting
+      - feature/1.9.4-backup-workbench
     paths:
       - "**.py"
       - "requirements.txt"
@@ -64,6 +65,7 @@ jobs:
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
+          python -m unittest -v tests.test_backup_workbench_v194
       - name: PC Backup Vault bauen
         shell: pwsh
         run: pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
@@ -117,4 +119,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.3: Konsolidiertes Job-Reporting mit eindeutiger Quelle-Ziel-Zuordnung für Dateispeicher, NAS und STRATO HiDrive. HiDrive-Berichte zeigen nicht mehr irrtümlich B2/Neon-Ziele. Lokale Audit-Reports enthalten keine Zugangsdaten oder internen Remote-Pfade."
+            --notes "1.9.4: Neue zentrale Ansicht 'Sichern & Wiederherstellen' mit Datei-Manager-Quellwahl, aktiven/deaktivierbaren Sicherungsmedien, klarer Quelle-Ziel-Zuordnung, Live-Tempo und blau/grün/gelb/roter Job-Ampel. Bestehende Backup-, Verschluesselungs-, HiDrive-, NAS-, Restore- und Verify-Engines bleiben erhalten."

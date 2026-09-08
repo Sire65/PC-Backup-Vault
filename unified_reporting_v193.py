@@ -134,16 +134,16 @@ def list_local_job_reports(store) -> list[dict[str, Any]]:
     base = reports_dir(store)
     if not base.exists():
         return []
-    rows = []
+    rows: list[tuple[dict[str, Any], int]] = []
     for path in base.glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict) and data.get("job_id"):
-                rows.append(data)
+                rows.append((data, path.stat().st_mtime_ns))
         except Exception:
             continue
-    rows.sort(key=lambda r: str(r.get("reported_at") or ""), reverse=True)
-    return rows
+    rows.sort(key=lambda item: (str(item[0].get("reported_at") or ""), item[1], str(item[0].get("job_id") or "")), reverse=True)
+    return [item[0] for item in rows]
 
 
 def latest_local_job_report(store) -> dict[str, Any] | None:
