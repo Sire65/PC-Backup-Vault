@@ -1,5 +1,5 @@
 #define MyAppName "PC Backup Vault"
-#define MyAppVersion "1.9.2"
+#define MyAppVersion "1.9.3"
 #define MyAppPublisher "KC"
 #define MyAppExeName "PC_Backup_Vault.exe"
 
@@ -12,33 +12,25 @@ DefaultDirName={autopf}\PC Backup Vault
 DefaultGroupName=PC Backup Vault
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=PC_Backup_Vault_1.9.2_Setup
+OutputBaseFilename=PC_Backup_Vault_1.9.3_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=admin
-UsePreviousAppDir=yes
-UninstallDisplayName=PC Backup Vault
-UninstallDisplayIcon={app}\PC_Backup_Vault.exe
+PrivilegesRequired=lowest
 SetupLogging=yes
-CloseApplications=yes
-RestartApplications=yes
-
-[Languages]
-Name: "german"; MessagesFile: "compiler:Languages\German.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"; Flags: checkedonce
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
 Source: "..\dist\PC_Backup_Vault\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\PC Backup Vault"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\PC Backup Vault"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\PC Backup Vault"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+[Tasks]
+Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"; Flags: unchecked
+
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
-Filename: "{app}\{#MyAppExeName}"; Description: "PC Backup Vault jetzt starten"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "PC Backup Vault starten"; Flags: nowait postinstall skipifsilent
