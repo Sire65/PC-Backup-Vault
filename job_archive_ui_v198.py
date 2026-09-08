@@ -12,6 +12,7 @@ from job_archive_v198 import (
     archive_file_count, archive_path, get_job, index_hidrive_job, list_job_files, list_jobs,
     refresh_archive, refresh_archive_full,
 )
+from restore_progress_v1910 import RestoreProgressDialog
 from unified_reporting_v193 import human_size
 
 
@@ -68,6 +69,7 @@ class JobArchiveWindow(tk.Toplevel):
     def __init__(self, app, recent_jobs_func):
         super().__init__(app)
         self.app = app; self.recent_jobs_func = recent_jobs_func
+        self._restore_progress = None
         self.title("PC Backup Vault – Job-Archiv"); self.geometry("1460x760"); self.minsize(1100,620); self.transient(app)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         head=ttk.Frame(self,padding=(14,12,14,8)); head.pack(fill="x")
@@ -90,7 +92,7 @@ class JobArchiveWindow(tk.Toplevel):
         foot=ttk.Frame(self,padding=(14,8,14,14)); foot.pack(fill="x")
         self.details=ttk.Label(foot,text="Job auswählen. Doppelklick startet die Wiederherstellung.",wraplength=800,justify="left"); self.details.pack(side="left",fill="x",expand=True)
         ttk.Button(foot,text="📄 Dateien anzeigen",command=self.show_files).pack(side="right",padx=(6,0))
-        ttk.Button(foot,text="♻ Ausgewählten Job wiederherstellen",command=self.restore_selected).pack(side="right")
+        self.restore_btn=ttk.Button(foot,text="♻ Ausgewählten Job wiederherstellen",command=self.restore_selected); self.restore_btn.pack(side="right")
         self.tree.bind("<<TreeviewSelect>>",lambda _e:self._show_details()); self.search_var.trace_add("write",lambda *_:self._render())
         self.rows=[]; self.refresh(); entry.focus_set()
 
@@ -98,7 +100,6 @@ class JobArchiveWindow(tk.Toplevel):
         counts=refresh_archive(self.app.store,self.app.active_dsn(),self.recent_jobs_func)
         self.rows=list_jobs(self.app.store); self._render()
         self.info.config(text=f"Archiv: {counts['total']} Job(s) · {archive_file_count(self.app.store)} Dateiindex-Einträge")
-        # HiDrive manifests are small but require network access. Load them outside the UI thread.
         def remote():
             try:
                 refresh_archive_full(self.app,self.recent_jobs_func,include_hidrive=True)
@@ -138,6 +139,12 @@ class JobArchiveWindow(tk.Toplevel):
         JobFilesWindow(self.app,jid)
 
     def restore_selected(self):
+        if self._restore_progress is not None:
+            try:
+                if self._restore_progress.winfo_exists():
+                    self._restore_progress.lift(); self._restore_progress.focus_force(); return
+            except Exception:
+                self._restore_progress = None
         jid=self._selected_job_id()
         if not jid: messagebox.showinfo("Job-Archiv","Bitte zuerst einen Job auswählen.",parent=self); return
         job=get_job(self.app.store,jid) or {}; kind=str((job.get("locator") or {}).get("kind") or "").upper(); backend=str(job.get("backend_label") or "").lower()
@@ -146,19 +153,58 @@ class JobArchiveWindow(tk.Toplevel):
         destination=filedialog.askdirectory(parent=self,title=f"Wiederherstellungsziel für Job {jid}")
         if not destination: return
         self.details.config(text=f"Wiederherstellung von {jid} läuft …")
+        self.restore_btn.configure(state="disabled")
+        progress=RestoreProgressDialog(self,jid,int(job.get("file_count") or 0),int(job.get("original_bytes") or 0))
+        self._restore_progress=progress
+        try: progress.grab_set()
+        except Exception: pass
+
+        def on_progress(info):
+            data=dict(info or {})
+            try: self.after(0,lambda d=data: progress.update_progress(d))
+            except Exception: pass
+
         def work():
             try:
-                result=restore_archived_job(self.app,jid,Path(destination)); self.after(0,lambda:self._restore_done(jid,result))
+                result=restore_archived_job(self.app,jid,Path(destination),progress=on_progress)
+                self.after(0,lambda:self._restore_done(jid,result,progress))
             except RuntimeError as exc:
-                if str(exc)=="DATABASE_RESTORE": self.after(0,lambda:self._database_restore(jid))
-                else: self.after(0,lambda e=exc:self._restore_failed(jid,e))
-            except Exception as exc: self.after(0,lambda e=exc:self._restore_failed(jid,e))
+                if str(exc)=="DATABASE_RESTORE": self.after(0,lambda:self._database_restore(jid,progress))
+                else: self.after(0,lambda e=exc:self._restore_failed(jid,e,progress))
+            except Exception as exc: self.after(0,lambda e=exc:self._restore_failed(jid,e,progress))
         threading.Thread(target=work,name=f"pbv-archive-restore-{jid[:8]}",daemon=True).start()
 
-    def _database_restore(self,jid): self.app._archive_restore_job_id=jid; self.app.open_restore_assistant()
-    def _restore_done(self,jid,result):
-        self.refresh(); messagebox.showinfo("Wiederherstellung erfolgreich",f"Job {jid} wurde wiederhergestellt.\n\n{result['files']} Datei(en) · {human_size(result['bytes'])}\nZiel: {result['destination']}\n\nSHA-256-Prüfung: PASS",parent=self)
-    def _restore_failed(self,jid,exc): self.refresh(); messagebox.showerror("Wiederherstellung fehlgeschlagen",f"Job {jid}\n\n{exc}",parent=self)
+    def _database_restore(self,jid,progress=None):
+        if progress:
+            try: progress.destroy()
+            except Exception: pass
+        self._restore_progress=None; self.restore_btn.configure(state="normal")
+        self.app._archive_restore_job_id=jid; self.app.open_restore_assistant()
+
+    def _restore_done(self,jid,result,progress=None):
+        if progress:
+            try:
+                progress.finish(True,f"{result['files']} Datei(en) erfolgreich wiederhergestellt · SHA-256 PASS")
+                progress.grab_release()
+            except Exception: pass
+        self.refresh(); self.restore_btn.configure(state="normal")
+        messagebox.showinfo("Wiederherstellung erfolgreich",f"Job {jid} wurde wiederhergestellt.\n\n{result['files']} Datei(en) · {human_size(result['bytes'])}\nZiel: {result['destination']}\n\nSHA-256-Prüfung: PASS",parent=progress if progress and progress.winfo_exists() else self)
+        if progress:
+            try: progress.destroy()
+            except Exception: pass
+        self._restore_progress=None
+
+    def _restore_failed(self,jid,exc,progress=None):
+        if progress:
+            try:
+                progress.finish(False,str(exc)); progress.grab_release()
+            except Exception: pass
+        self.refresh(); self.restore_btn.configure(state="normal")
+        messagebox.showerror("Wiederherstellung fehlgeschlagen",f"Job {jid}\n\n{exc}",parent=progress if progress and progress.winfo_exists() else self)
+        if progress:
+            try: progress.destroy()
+            except Exception: pass
+        self._restore_progress=None
 
 
 def apply_job_archive_v198(AppClass, RestoreAssistantClass, WorkbenchClass, recent_jobs_func):

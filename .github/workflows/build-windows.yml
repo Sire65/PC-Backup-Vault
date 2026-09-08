@@ -13,6 +13,7 @@ on:
       - fix/1.9.7-workbench-close
       - feature/1.9.8-job-archive-restore
       - feature/1.9.9-job-archive-pro
+      - feature/1.9.9-restore-progress
     paths:
       - "**.py"
       - "requirements.txt"
@@ -74,6 +75,7 @@ jobs:
           python -m unittest -v tests.test_hotfix_v195
           python -m unittest -v tests.test_backup_workbench_ui_v196
           python -m unittest -v tests.test_job_archive_v198
+          python -m unittest -v tests.test_restore_progress_v1910
       - name: PC Backup Vault bauen
         shell: pwsh
         run: pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
@@ -127,4 +129,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.9: Das lokale SQLite-Job-Archiv wurde auf Schema v2 erweitert. Neben Jobdaten werden Speicherorte, Dateiindex, SHA-256, Größen, Chunk-Anzahl, Sicherungsart, Warn-/Fehlerzähler sowie Prüf- und Restore-Historien dauerhaft archiviert. B2/Neon-Dateien werden aus der bestehenden Datenbank übernommen; lokale/NAS- und HiDrive-Manifeste werden katalogisiert. Dateinamen und Pfade bleiben in SQLite verschlüsselt und werden nur zur Anzeige lokal entschlüsselt. Bestehende Backup- und Transport-Engines bleiben unverändert."
+            --notes "1.9.10: Rücksicherungen aus dem Job-Archiv zeigen jetzt einen eigenen Live-Fortschrittsdialog mit Prozentbalken, aktuell bearbeiteter Datei, Datei- und Datenzähler, bisheriger Dauer, geschätzter Restdauer sowie aktueller und durchschnittlicher Geschwindigkeit. HiDrive- und Dateispeicher-Restore melden Fortschritt auf Chunk-Ebene; SHA-256-Prüfung und bestehende Restore-Logik bleiben erhalten."
