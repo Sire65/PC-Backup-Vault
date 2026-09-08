@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -88,7 +89,7 @@ def upsert_job(store, job: dict[str, Any]) -> None:
         return
     verification = job.get("verification") or {}
     locator = job.get("locator") or {}
-    with _connect(store) as conn:
+    with closing(_connect(store)) as conn:
         old = conn.execute("SELECT restore_status,restore_at FROM jobs WHERE job_id=?", (job_id,)).fetchone()
         restore_status = (old["restore_status"] if old else None) or str(job.get("restore_status") or "") or None
         restore_at = (old["restore_at"] if old else None) or _iso(job.get("restore_at"))
@@ -213,12 +214,12 @@ def refresh_archive(store, dsn: str | None = None, recent_jobs_func=None) -> dic
 
 
 def archive_count(store) -> int:
-    with _connect(store) as conn:
+    with closing(_connect(store)) as conn:
         return int(conn.execute("SELECT count(*) FROM jobs").fetchone()[0])
 
 
 def list_jobs(store, limit: int = 10000) -> list[dict[str, Any]]:
-    with _connect(store) as conn:
+    with closing(_connect(store)) as conn:
         rows = conn.execute(
             """SELECT * FROM jobs
                ORDER BY COALESCE(started_at,reported_at,updated_at) DESC, job_id DESC LIMIT ?""",
@@ -236,7 +237,7 @@ def list_jobs(store, limit: int = 10000) -> list[dict[str, Any]]:
 
 
 def get_job(store, job_id: str) -> dict[str, Any] | None:
-    with _connect(store) as conn:
+    with closing(_connect(store)) as conn:
         row = conn.execute("SELECT * FROM jobs WHERE job_id=?", (str(job_id),)).fetchone()
     if not row:
         return None
@@ -253,7 +254,7 @@ def get_job(store, job_id: str) -> dict[str, Any] | None:
 
 
 def mark_restore(store, job_id: str, status: str) -> None:
-    with _connect(store) as conn:
+    with closing(_connect(store)) as conn:
         conn.execute(
             "UPDATE jobs SET restore_status=?,restore_at=?,updated_at=? WHERE job_id=?",
             (str(status), _now(), _now(), str(job_id)),
