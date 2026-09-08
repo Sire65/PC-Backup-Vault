@@ -7,7 +7,7 @@ from pathlib import Path, PureWindowsPath
 
 from crypto_box import decrypt_bytes, decrypt_text, sha256_bytes
 from hidrive_sftp_v192 import VAULT_DIR as HIDRIVE_VAULT_DIR, _root, sftp_connection
-from job_archive_v198 import get_job, mark_restore
+from job_archive_v198 import get_job, index_manifest, record_restore_event
 from storage_v180 import VAULT_DIR as FS_VAULT_DIR
 
 
@@ -16,7 +16,7 @@ def _safe_rel(original_path: str, file_name: str) -> Path:
     p = PureWindowsPath(original_path or "")
     parts = []
     if p.drive:
-        drive = p.drive.replace(":", "").replace("\\", "").replace("/", "").strip()
+        drive = p.drive.replace(": " , "").replace(":", "").replace("\\", "").replace("/", "").strip()
         if drive:
             parts.append(drive)
     for value in p.parts:
@@ -170,17 +170,20 @@ def restore_archived_job(app, job_id: str, destination: str | Path) -> dict:
             with sftp_connection(app.store, str(account.get("id"))) as (sftp, live_account):
                 manifest_path = posixpath.join(_root(live_account), HIDRIVE_VAULT_DIR, "jobs", f"{job_id}.json")
                 manifest = json.loads(_read_sftp_bytes(sftp, manifest_path).decode("utf-8"))
+                index_manifest(app.store, job_id, manifest, "STRATO HiDrive", job_id)
                 result = _restore_manifest_sftp(app, sftp, live_account, manifest, destination)
         elif kind == "FILESYSTEM" or str(job.get("payload_target") or "").upper() == "FILESYSTEM":
             target = _match_filesystem_target(app.store, job)
             if not target:
                 raise RuntimeError("Das zu diesem Archiv-Job gehörende Laufwerk/NAS-Ziel ist nicht mehr konfiguriert.")
             manifest, vault_root = _load_local_manifest(target, job_id)
+            index_manifest(app.store, job_id, manifest, job.get("backend_label") or "FILESYSTEM", job_id)
             result = _restore_manifest_local(app, manifest, vault_root, destination)
         else:
             raise RuntimeError("DATABASE_RESTORE")
-    except Exception:
-        mark_restore(app.store, job_id, "FAILED")
+    except Exception as exc:
+        if str(exc) != "DATABASE_RESTORE":
+            record_restore_event(app.store, job_id, "FAILED", str(destination), details=str(exc))
         raise
-    mark_restore(app.store, job_id, "PASS")
+    record_restore_event(app.store, job_id, "PASS", str(destination), result["files"], result["bytes"], "PASS", "SHA-256 nach Wiederherstellung geprüft")
     return result
