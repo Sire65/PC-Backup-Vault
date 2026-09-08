@@ -37,6 +37,8 @@ from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
 from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
+from job_archive_ui_v198 import apply_job_archive_v198
+from vault_db import recent_jobs
 from config_store import APP_VERSION
 from kc_backup_bridge_v180 import start_bridge
 import ui as ui_module
@@ -68,6 +70,7 @@ apply_restore_filters_v189(RestoreAssistant, _file_group, _fmt_size)
 apply_backup_workbench_v194(App, storage_v180_module)
 apply_hotfix_v195(App, BackupWorkbench, APP_VERSION)
 apply_backup_workbench_ui_v196(BackupWorkbench)
+apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
 
 
 def _show_already_running():
