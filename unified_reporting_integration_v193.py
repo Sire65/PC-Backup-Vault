@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox
 from unified_reporting_v193 import (
     human_size,
     latest_local_job_report,
+    list_local_job_reports,
     load_local_job_report,
     persist_local_job_report,
     report_text as unified_report_text,
@@ -24,6 +25,19 @@ def _parse_dt(value):
         return datetime.fromisoformat(str(value))
     except Exception:
         return None
+
+
+def _local_as_history_tuple(r):
+    ts = _parse_dt(r.get("reported_at")) or datetime.now().astimezone()
+    files = int(r.get("files") or r.get("file_count") or 0)
+    return (
+        str(r.get("job_id") or ""), ts, ts, str(r.get("status") or "SUCCESS"), files,
+        int(r.get("original_bytes") or 0), int(r.get("stored_bytes") or 0), 0,
+        str(r.get("source_to_target") or ""), "PLAN" if r.get("plan_name") else "MANUAL",
+        r.get("plan_name") or None, "AUTO", files, files, 0, "FILESYSTEM",
+        int(r.get("directory_count") or 0), float(r.get("duration_seconds") or 0),
+        int(r.get("avg_speed_bps") or 0), int(r.get("peak_transfer_bps") or 0), 0, 0, 0,
+    )
 
 
 def apply_unified_reporting_v193(AppClass, storage_module, hidrive_integration_module, ui_module=None):
@@ -123,9 +137,9 @@ def apply_unified_reporting_v193(AppClass, storage_module, hidrive_integration_m
             self.status_lbl.config(text="GRÜN" if status == "SUCCESS" else status)
             files = int(local.get("files") or local.get("file_count") or 0)
             self.summary_lbl.config(
-                text=f"{files} Dateien · {human_size(local.get('original_bytes'))} · "
-                     f"{float(local.get('duration_seconds') or 0):.1f} s · Ø {human_size(local.get('avg_speed_bps'))}/s · "
-                     f"Ziel: {local.get('target_label') or '–'}"
+                text=f"{files} Dateien · {int(local.get('directory_count') or 0)} Verzeichnisse · "
+                     f"{human_size(local.get('original_bytes'))} · {float(local.get('duration_seconds') or 0):.1f} s · "
+                     f"Ø {human_size(local.get('avg_speed_bps'))}/s · Ziel: {local.get('target_label') or '–'}"
             )
             self.text.config(state="normal")
             self.text.delete("1.0", "end")
@@ -209,5 +223,66 @@ def apply_unified_reporting_v193(AppClass, storage_module, hidrive_integration_m
             return original_last_report(self)
 
         AppClass.open_last_report = open_last_report
+
+        # Merge local filesystem/HiDrive jobs into the existing history table. The
+        # storage filter remains FILESYSTEM, while the visible storage cell and the
+        # new route column show the exact destination and Quelle → Ziel assignment.
+        HistoryWindow = getattr(ui_module, "HistoryWindow", None)
+        if HistoryWindow is not None:
+            original_history_build = HistoryWindow._build
+            original_history_load = HistoryWindow.load_data
+            original_history_render = HistoryWindow._render
+            original_history_verify = HistoryWindow.verify_selected
+
+            def history_build(self):
+                original_history_build(self)
+                cols = list(self.tree.cget("columns"))
+                if "route" not in cols:
+                    cols.append("route")
+                    self.tree.configure(columns=cols)
+                    self.tree.heading("route", text="Quelle → Ziel")
+                    self.tree.column("route", width=360, anchor="w")
+
+            def history_load(self):
+                original_history_load(self)
+                local_rows = list_local_job_reports(self.app.store)
+                self._local_reports_v193 = {str(r.get("job_id")): r for r in local_rows}
+                existing = {str(j[0]) for j in getattr(self, "jobs", [])}
+                for local in local_rows:
+                    if str(local.get("job_id")) not in existing:
+                        self.jobs.append(_local_as_history_tuple(local))
+                        self.file_search[str(local.get("job_id"))] = [str(local.get("source_to_target") or "").lower()]
+                self.jobs.sort(key=lambda row: row[1], reverse=True)
+                self.apply_filters()
+
+            def history_render(self, caption):
+                original_history_render(self, caption)
+                local_map = getattr(self, "_local_reports_v193", {})
+                for iid, jid in getattr(self, "item_job", {}).items():
+                    local = local_map.get(str(jid))
+                    if local:
+                        self.tree.set(iid, "storage", local.get("target_label") or "Dateispeicher")
+                        self.tree.set(iid, "route", local.get("source_to_target") or "–")
+                    else:
+                        self.tree.set(iid, "route", "–")
+
+            def history_verify(self):
+                jid = self.selected_job()
+                if jid and str(jid) in getattr(self, "_local_reports_v193", {}):
+                    local = self._local_reports_v193[str(jid)]
+                    messagebox.showinfo(
+                        "Historie",
+                        f"Dieser Job liegt auf {local.get('target_label') or 'Dateispeicher'}.\n\n"
+                        f"Verifizierungsstatus im Job-Report: {(local.get('verification') or {}).get('status', 'noch nicht durchgeführt')}.\n"
+                        "Die Neon/B2-Schnellprüfung wird für dieses Dateispeicher-Ziel nicht fälschlich gestartet.",
+                        parent=self,
+                    )
+                    return
+                return original_history_verify(self)
+
+            HistoryWindow._build = history_build
+            HistoryWindow.load_data = history_load
+            HistoryWindow._render = history_render
+            HistoryWindow.verify_selected = history_verify
 
     AppClass._unified_reporting_v193 = True
