@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/hidrive-tree-explorer-1.9.15
       - feature/hidrive-live-explorer-1.9.14
       - hotfix/hidrive-tuev-explorer-1.9.13
       - fix/hidrive-target-activation-v192
@@ -73,6 +74,8 @@ jobs:
           python -m unittest -v tests.test_hidrive_tuev_fix_v1913
           python -m unittest -v tests.test_hidrive_live_explorer_v1914
           python -m unittest -v tests.test_hidrive_live_safety_v1914
+          python -m unittest -v tests.test_hidrive_tree_explorer_v1915
+          python -m unittest -v tests.test_hidrive_tree_selection_safety_v1915
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
@@ -137,4 +140,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.14: Neuer HiDrive Live-Explorer als echter SFTP-Dateimanager für den kompletten HiDrive-Benutzerbereich. Er zeigt Ordner und Dateien live an und unterstützt Mehrfachauswahl, Navigation, Aktualisieren, neue Ordner, Umbenennen, Verschieben, Löschen, Herunterladen und Hochladen. Der interne .pc-backup-vault-Bereich bleibt sichtbar, ist für verändernde Aktionen aber zusätzlich geschützt."
+            --notes "1.9.15: Der HiDrive Live-Explorer zeigt Ordner jetzt wie der Windows-Explorer hierarchisch mit sichtbaren Auf-/Zuklapp-Pfeilen und Einrückungen. Unterordner werden beim Aufklappen live per SFTP nachgeladen. Die Baumansicht gilt auch für die Zielordner-Auswahl beim Verschieben; bestehende Dateiaktionen und der Schutz von .pc-backup-vault bleiben erhalten."
