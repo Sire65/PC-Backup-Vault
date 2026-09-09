@@ -36,7 +36,15 @@ def _looks_like_hidrive(account: dict) -> bool:
 
 
 def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
-    """Resolve HiDrive accounts from the exact runtime sources used by backup/TÜV."""
+    """Resolve HiDrive accounts from the exact runtime sources used by backup/TÜV.
+
+    A CLOUD-SFTP target is authoritative. Older installations can contain a
+    stale ``enabled=false`` on the cloud-account record while the generated
+    SFTP target is still present and the real SFTP transport/TÜV works. Such a
+    target-backed account must remain visible in the Live Explorer. The
+    ``enabled`` flag is only respected for compatibility-only accounts that do
+    not yet have a runtime SFTP target.
+    """
     accounts = [dict(x or {}) for x in list(cloud_accounts_func(store) or [])]
     targets = [dict(x or {}) for x in list(targets_func(store) or [])]
 
@@ -49,17 +57,24 @@ def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
     seen = set()
     missing_ids = []
     sftp_targets = []
+    stale_disabled_ids = []
 
-    def add(account: dict):
+    def add(account: dict, *, authoritative: bool = False):
+        account_id = _text(account.get("id"))
         if account.get("enabled", True) is False:
-            return
-        key = _text(account.get("id")) or f"{_text(account.get('name'))}|{_text(account.get('username'))}"
+            if not authoritative:
+                return
+            if account_id:
+                stale_disabled_ids.append(account_id)
+
+        key = account_id or f"{_text(account.get('name'))}|{_text(account.get('username'))}"
         if not key or key in seen:
             return
         seen.add(key)
         out.append(dict(account))
 
     # Authoritative path: exactly the CLOUD-SFTP targets used by backup/TÜV.
+    # Do not reject these accounts because of a stale legacy enabled flag.
     for target in targets:
         if not _is_sftp_target(target):
             continue
@@ -69,12 +84,13 @@ def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
         if account is None:
             missing_ids.append(account_id)
             continue
-        add(account)
+        add(account, authoritative=True)
 
     # Compatibility path before a filesystem bridge was ever generated.
+    # Here the account-level enabled switch still has its normal meaning.
     for account in accounts:
         if _looks_like_hidrive(account):
-            add(account)
+            add(account, authoritative=False)
 
     diagnostics = {
         "cloud_accounts": len(accounts),
@@ -82,6 +98,7 @@ def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
         "sftp_targets": len(sftp_targets),
         "matched_accounts": len(out),
         "missing_account_ids": tuple(dict.fromkeys(missing_ids)),
+        "stale_disabled_account_ids": tuple(dict.fromkeys(stale_disabled_ids)),
     }
     return out, diagnostics
 
@@ -95,11 +112,12 @@ def _account_names(accounts):
 
 def _diagnostic_text(diag: dict, version: str) -> str:
     missing = ", ".join(diag.get("missing_account_ids") or ()) or "–"
+    stale = ", ".join(diag.get("stale_disabled_account_ids") or ()) or "–"
     return (
         f"Version {version} · Cloud-Konten: {diag.get('cloud_accounts', 0)} · "
         f"CLOUD-SFTP-Ziele: {diag.get('sftp_targets', 0)} · "
         f"zugeordnete Konten: {diag.get('matched_accounts', 0)} · "
-        f"fehlende Konto-IDs: {missing}"
+        f"fehlende Konto-IDs: {missing} · alte enabled=false: {stale}"
     )
 
 
