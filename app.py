@@ -44,7 +44,10 @@ from hidrive_account_list_fix_v1918 import apply_hidrive_account_list_fix_v1918
 import context_progress_v1917 as context_progress_module
 from context_progress_v1917 import apply_context_progress_v1917
 from context_progress_safety_v1917 import apply_context_progress_safety_v1917
+import storage_center_v1919 as storage_center_module
 from storage_center_v1919 import apply_storage_center_v1919, StorageCenterWindow
+from storage_center_exact_v1920 import apply_storage_center_exact_v1920
+from storage_center_db_import_v1920 import apply_storage_center_db_import_v1920
 from main_navigation_v1919 import apply_main_navigation_v1919
 from test_runtime_fix_v1919 import apply_test_runtime_fix_v1919
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
@@ -102,9 +105,12 @@ apply_explorer_labels_v1913(App, JobArchiveWindow)
 apply_hidrive_live_explorer_v1914(App)
 apply_context_progress_v1917(App, hidrive_live_module, JobArchiveWindow, JobFilesWindow)
 apply_context_progress_safety_v1917(context_progress_module, hidrive_live_module)
-# 1.9.19 is applied last: it only gathers existing backends, reorganizes UI entry points,
-# and makes test windows non-blocking with inline percentage/elapsed-time feedback.
+# 1.9.19 gathers existing backends and reorganizes the UI. 1.9.20 is then
+# applied additively so every live target shows its actual database/filesystem
+# root instead of relying on a configured label or default schema.
 apply_storage_center_v1919(App)
+apply_storage_center_exact_v1920(storage_center_module, StorageCenterWindow)
+apply_storage_center_db_import_v1920(StorageCenterWindow)
 apply_main_navigation_v1919(App, StorageCenterWindow)
 apply_test_runtime_fix_v1919(App, SettingsWindow, ui_module, kc_communication_module)
 
