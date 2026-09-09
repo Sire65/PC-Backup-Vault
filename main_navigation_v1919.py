@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from database_profiles_v1929 import apply_database_profiles_v1929
 
 
 CORE_BACKUP_BUTTONS = {
@@ -71,6 +72,13 @@ def apply_main_navigation_v1919(AppClass, StorageCenterWindowClass):
     truth and backup/restore logic is not rewritten.
     """
     if getattr(AppClass,"_main_navigation_v1919",False): return
+
+    # 1.9.29: central database/Supabase profiles are installed here because
+    # main navigation already owns the Settings + Storage-Explorer handoff.
+    # This keeps the feature additive and leaves backup/restore engines alone.
+    from ui import SettingsWindow
+    apply_database_profiles_v1929(AppClass, SettingsWindow, StorageCenterWindowClass)
+
     original_build=AppClass._build
 
     def build(self):
