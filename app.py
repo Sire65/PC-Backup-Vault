@@ -40,6 +40,7 @@ from hidrive_live_safety_v1914 import apply_hidrive_live_safety_v1914
 from hidrive_tree_explorer_v1915 import apply_hidrive_tree_explorer_v1915
 from hidrive_tree_selection_safety_v1915 import apply_hidrive_tree_selection_safety_v1915
 from hidrive_hidden_items_v1916 import apply_hidrive_hidden_items_v1916
+from context_progress_v1917 import apply_context_progress_v1917
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
@@ -47,7 +48,7 @@ from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
 from volume_label_ui_v1912 import apply_volume_labels_v1912
 import job_archive_safe_v199  # patches archive upserts before the UI/refresh layer is imported
-from job_archive_ui_v198 import apply_job_archive_v198, JobArchiveWindow
+from job_archive_ui_v198 import apply_job_archive_v198, JobArchiveWindow, JobFilesWindow
 from restore_explorer_v1911 import apply_restore_explorer_v1911
 from vault_db import recent_jobs
 from config_store import APP_VERSION
@@ -91,6 +92,7 @@ apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
 apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
 apply_explorer_labels_v1913(App, JobArchiveWindow)
 apply_hidrive_live_explorer_v1914(App)
+apply_context_progress_v1917(App, hidrive_live_module, JobArchiveWindow, JobFilesWindow)
 
 
 def _show_already_running():
