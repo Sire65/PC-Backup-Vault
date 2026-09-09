@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - tuev/deep-consolidation-drive-discovery-1.9.24
+      - feature/supabase-database-manager-1.9.29
     paths:
       - '**.py'
       - 'requirements.txt'
