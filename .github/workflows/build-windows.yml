@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/supabase-database-manager-1.9.29
       - tuev/deep-consolidation-drive-discovery-1.9.24
       - hotfix/hidrive-report-target-progress-1.9.23
       - hotfix/source-selection-safety-1.9.22
@@ -187,4 +188,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.24: Tiefenkonsolidierung der Abläufe und Windows-Laufwerkserkennung. Quellenauswahl und Speicher-Explorer verwenden dasselbe robuste Laufwerksinventar aus Python-, nativer Windows- und Fallback-Erkennung. Laufwerksname, Typ und Erreichbarkeit werden sichtbar, Rohpfade bleiben unverändert. Der interne TÜV meldet die tatsächlich erkannten Laufwerke. Zusätzlich laufen vollständige Gesamtregression, Patchketten-Import und reale Windows-Laufwerksprobe vor dem Build. Backup-, Restore-, Verschlüsselungs- und Transportkern bleiben unverändert."
+            --notes "1.9.29: Zentrale Datenbankverwaltung mit vorbereiteten Supabase-Profilen. Die beiden bekannten Supabase-Projekte erscheinen im Speicher-Explorer auch ohne DB-Passwort sichtbar als Zugang fehlt. Project-Ref, Region, Host und Standarddatenbank werden vorbelegt; das DB-Passwort wird nur im Windows-Anmeldetresor gespeichert und kann direkt aus den Einstellungen gesetzt und getestet werden. Backup-, Restore-, Verschlüsselungs- und Transportkern bleiben unverändert."
