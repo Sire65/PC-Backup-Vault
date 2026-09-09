@@ -1,7 +1,7 @@
 import unittest
 
 from archive_restore_selective_v1911 import filter_manifest
-from restore_explorer_v1911 import manifest_index_from_file_key
+from restore_explorer_v1911 import _folder_parts, manifest_index_from_file_key
 
 
 class RestoreExplorerV1911Tests(unittest.TestCase):
@@ -10,6 +10,9 @@ class RestoreExplorerV1911Tests(unittest.TestCase):
         self.assertEqual(manifest_index_from_file_key("MANIFEST:job-1:42:def"), 42)
         self.assertIsNone(manifest_index_from_file_key("DB:123"))
         self.assertIsNone(manifest_index_from_file_key("MANIFEST:broken"))
+
+    def test_windows_drive_is_not_duplicated(self):
+        self.assertEqual(_folder_parts(r"C:\Users\Hans\Dokumente"), ["C:", "Users", "Hans", "Dokumente"])
 
     def test_filter_manifest_only_selected_files(self):
         manifest = {
