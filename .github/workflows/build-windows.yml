@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - hotfix/hidrive-tuev-explorer-1.9.13
       - fix/hidrive-target-activation-v192
       - feature/1.9.3-unified-reporting
       - feature/1.9.4-backup-workbench
@@ -68,6 +69,7 @@ jobs:
           python -m unittest -v tests.test_inventory_backup_handoff_v190
           python -m unittest -v tests.test_storage_health_production_patch
           python -m unittest -v tests.test_hidrive_sftp_v192
+          python -m unittest -v tests.test_hidrive_tuev_fix_v1913
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
@@ -132,4 +134,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.12: Wiederherstellungs-Explorer für Backup-Snapshots mit Datei-/Ordnerauswahl; selektive Rückholung aus HiDrive sowie Dateispeichern wie NAS, USB und externen Laufwerken; B2/Neon-Auswahl wird in den bestehenden Restore-Assistenten übernommen. Live-Restore-Fortschritt und SHA-256-Prüfung bleiben aktiv. Windows-Laufwerksübersichten zeigen zusätzlich den Volume-Namen, z. B. E: Backup SSD, während intern die Originalpfade unverändert bleiben."
+            --notes "1.9.13: HiDrive-Ziele werden im TÜV nicht mehr als lokale Windows-Pfade geprüft. Stattdessen erfolgt ein echter SFTP-Verbindungs- und Schreib/Lesen/Löschen-Test, der letzte Remote-Backup-Stand wird aus dem HiDrive-Katalog gelesen und für eine geeignete kleine Datei wird eine echte Entschlüsselungs-/SHA-256-Restore-Probe durchgeführt. Der bestehende Wiederherstellungs-Explorer ist auf der Hauptseite nun direkt als Backup-Explorer erkennbar."

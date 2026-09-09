@@ -15,6 +15,7 @@ from storage_v180 import apply_v180
 from storage_v180_settings import apply_settings_v180
 from transfer_monitor_v180 import apply_transfer_monitor
 from assistant_v180 import apply_assistant_v180, BackupAssistant
+import professional_v180 as professional_v180_module
 from professional_integration_v180 import apply_professional_v180
 from system_image_integration_v180 import apply_system_image_assistant
 from all_tests_and_run_now_v180 import apply_all_tests_and_run_now_v180
@@ -32,6 +33,7 @@ import cloud_targets_ui_v191 as cloud_targets_ui_module
 from cloud_targets_ui_v191 import apply_cloud_targets_v191
 import hidrive_integration_v192 as hidrive_integration_module
 from hidrive_integration_v192 import apply_hidrive_sftp_v192
+from hidrive_tuev_fix_v1913 import apply_hidrive_tuev_fix_v1913, apply_explorer_labels_v1913
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
@@ -57,6 +59,7 @@ apply_assistant_v180(App)
 enable_inventory_backup_handoff(App, BackupAssistant)
 apply_cloud_targets_v191(SettingsWindow, BackupAssistant, storage_v180_module)
 apply_hidrive_sftp_v192(App, cloud_targets_module, cloud_targets_ui_module, storage_v180_module, plan_runner_module)
+apply_hidrive_tuev_fix_v1913(professional_v180_module)
 apply_cloud_target_activation_v192(cloud_targets_ui_module)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_unified_reporting_v193(App, storage_v180_module, hidrive_integration_module, ui_module)
@@ -76,6 +79,7 @@ apply_backup_workbench_ui_v196(BackupWorkbench)
 apply_volume_labels_v1912(BackupWorkbench)
 apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
 apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
+apply_explorer_labels_v1913(App, JobArchiveWindow)
 
 
 def _show_already_running():
