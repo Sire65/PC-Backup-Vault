@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from config_store import APP_VERSION
+import cloud_targets_v191 as cloud_targets_module
+import storage_v180 as storage_v180_module
+from hidrive_live_runtime_fix_v1927 import apply_hidrive_live_runtime_fix_v1927
+
 
 def _norm_hint(value: object) -> str:
     return str(value or "").strip().casefold()
@@ -38,14 +43,7 @@ def _sftp_target_account_ids(store) -> set[str]:
 
 
 def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
-    """Return every active account that the existing HiDrive SFTP transport can open.
-
-    Modern and legacy STRATO/HiDrive metadata remain valid signals. In addition,
-    an account referenced by an existing CLOUD-SFTP filesystem target is an
-    authoritative runtime signal because the TÜV and backup transport resolve
-    that same ``cloud_account_id`` through ``sftp_connection``. This keeps the
-    Live Explorer consistent with connections that are already proven to work.
-    """
+    """Return every active account that the existing HiDrive SFTP transport can open."""
     sftp_target_ids = _sftp_target_account_ids(store)
     out: list[dict] = []
     seen: set[str] = set()
@@ -60,11 +58,7 @@ def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
         explicit_strato = provider_code == "STRATO_HIDRIVE"
         legacy_strato = _looks_like_strato_hidrive(account)
         has_live_sftp_target = bool(account_id and account_id in sftp_target_ids)
-
-        # Keep the explorer aligned with the runtime/TÜV path: a CLOUD-SFTP
-        # target already proves that this account is handled by the SFTP bridge.
-        eligible = explicit_strato or legacy_strato or has_live_sftp_target
-        if not eligible:
+        if not (explicit_strato or legacy_strato or has_live_sftp_target):
             continue
 
         key = account_id or f"{account.get('name')}|{account.get('username')}"
@@ -77,7 +71,7 @@ def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
 
 
 def apply_hidrive_account_list_fix_v1918(live_module) -> None:
-    """Patch only the HiDrive Live-Explorer account enumeration."""
+    """Install legacy compatibility plus the authoritative 1.9.27 runtime resolver."""
     if getattr(live_module, "_hidrive_account_list_fix_v1918", False):
         return
 
@@ -86,3 +80,12 @@ def apply_hidrive_account_list_fix_v1918(live_module) -> None:
 
     live_module._hidrive_accounts = _hidrive_accounts
     live_module._hidrive_account_list_fix_v1918 = True
+
+    # 1.9.27: bind the actual explorer window to the same runtime target graph
+    # used by backup and TÜV, and repair an already-disabled combo after init.
+    apply_hidrive_live_runtime_fix_v1927(
+        live_module,
+        storage_v180_module,
+        cloud_targets_module,
+        APP_VERSION,
+    )
