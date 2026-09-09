@@ -81,6 +81,13 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
 
+      - name: Portable Version erzeugen
+        if: steps.existing.outputs.exists != 'true'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path "dist/PC_Backup_Vault/*" -DestinationPath "PC_Backup_Vault_${version}_Windows_Portable.zip" -Force
+
       - name: Inno Setup installieren
         if: steps.existing.outputs.exists != 'true'
         shell: pwsh
@@ -110,3 +117,4 @@ jobs:
           files: |
             installer/output/PC_Backup_Vault_*_Setup.exe
             installer/output/PC_Backup_Vault_*_Setup.exe.sha256
+            PC_Backup_Vault_*_Windows_Portable.zip
