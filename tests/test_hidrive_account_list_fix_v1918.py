@@ -31,11 +31,11 @@ class HiDriveAccountListFixTests(unittest.TestCase):
         result = eligible_hidrive_accounts(Store(), lambda _store: rows)
         self.assertEqual([x["id"] for x in result], ["hausmeister", "sire25"])
 
-    def test_real_legacy_record_without_provider_code_is_visible_by_strato_name(self):
+    def test_linked_cloud_sftp_target_is_authoritative_without_strato_hints(self):
         rows = [
             {
                 "id": "sire25",
-                "name": "Strato_sire25",
+                "name": "Cloud Konto A",
                 "username": "sire25",
                 "enabled": True,
                 "root_path": "/users/sire25/PC_Backup_Vault",
@@ -59,19 +59,23 @@ class HiDriveAccountListFixTests(unittest.TestCase):
         result = eligible_hidrive_accounts(Store(), lambda _store: rows)
         self.assertEqual([x["id"] for x in result], ["legacy"])
 
-    def test_disabled_or_non_strato_accounts_are_not_offered(self):
+    def test_unlinked_non_strato_account_is_not_offered(self):
         rows = [
-            {"id": "disabled", "provider_code": "STRATO_HIDRIVE", "enabled": False},
             {"id": "other", "provider_code": "GENERIC_SFTP", "name": "Mein Server", "enabled": True, "methods": ["SFTP"]},
             {"id": "active", "provider_code": "STRATO_HIDRIVE", "enabled": True},
         ]
+        result = eligible_hidrive_accounts(Store(), lambda _store: rows)
+        self.assertEqual([x["id"] for x in result], ["active"])
+
+    def test_disabled_linked_account_is_not_offered(self):
+        rows = [{"id": "disabled", "name": "Cloud Konto", "enabled": False}]
         store = Store({
             "filesystem_targets": [
-                {"kind": "CLOUD-SFTP", "cloud_method": "SFTP", "cloud_account_id": "other"}
+                {"kind": "CLOUD-SFTP", "cloud_method": "SFTP", "cloud_account_id": "disabled"}
             ]
         })
         result = eligible_hidrive_accounts(store, lambda _store: rows)
-        self.assertEqual([x["id"] for x in result], ["active"])
+        self.assertEqual(result, [])
 
     def test_missing_enabled_flag_defaults_to_active_for_legacy_records(self):
         rows = [{"id": "legacy", "provider_code": "STRATO_HIDRIVE"}]
