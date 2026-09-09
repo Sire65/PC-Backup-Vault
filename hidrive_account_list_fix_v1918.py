@@ -38,13 +38,13 @@ def _sftp_target_account_ids(store) -> set[str]:
 
 
 def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
-    """Return active STRATO HiDrive accounts without depending on one legacy field.
+    """Return every active account that the existing HiDrive SFTP transport can open.
 
-    Older PC Backup Vault installations can contain account records whose
-    ``provider_code`` or ``methods`` fields no longer exactly match today's
-    schema, while the generated CLOUD-SFTP target and credentials still work.
-    The Live Explorer therefore resolves accounts from several independent
-    signals and never relies on the methods flag alone.
+    Modern and legacy STRATO/HiDrive metadata remain valid signals. In addition,
+    an account referenced by an existing CLOUD-SFTP filesystem target is an
+    authoritative runtime signal because the TÜV and backup transport resolve
+    that same ``cloud_account_id`` through ``sftp_connection``. This keeps the
+    Live Explorer consistent with connections that are already proven to work.
     """
     sftp_target_ids = _sftp_target_account_ids(store)
     out: list[dict] = []
@@ -61,10 +61,9 @@ def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
         legacy_strato = _looks_like_strato_hidrive(account)
         has_live_sftp_target = bool(account_id and account_id in sftp_target_ids)
 
-        # A generated SFTP target is strong evidence, but only combine it with
-        # STRATO/HiDrive hints so generic SFTP providers do not leak into this
-        # dedicated explorer.
-        eligible = explicit_strato or legacy_strato or (has_live_sftp_target and legacy_strato)
+        # Keep the explorer aligned with the runtime/TÜV path: a CLOUD-SFTP
+        # target already proves that this account is handled by the SFTP bridge.
+        eligible = explicit_strato or legacy_strato or has_live_sftp_target
         if not eligible:
             continue
 
