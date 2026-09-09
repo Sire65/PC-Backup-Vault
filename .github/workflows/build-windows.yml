@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - hotfix/backup-target-selection-1.9.21
       - feature/exact-storage-explorer-1.9.20
       - feature/storage-center-ui-1.9.19
       - fix/hidrive-account-list-1.9.18
@@ -94,6 +95,7 @@ jobs:
           python -m unittest -v tests.test_backup_workbench_v194
           python -m unittest -v tests.test_hotfix_v195
           python -m unittest -v tests.test_backup_workbench_ui_v196
+          python -m unittest -v tests.test_backup_target_selection_fix_v1921
           python -m unittest -v tests.test_job_archive_v198
           python -m unittest -v tests.test_job_archive_safe_v199
           python -m unittest -v tests.test_restore_progress_v1910
@@ -152,4 +154,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.20: Der Speicher-Explorer zeigt die realen Inhalte aller bekannten Ziele statt nur konfigurierte Annahmen. Datenbanken werden als Projekt/Server → tatsächliche Datenbank → Schema → Tabelle/View → Spalten dargestellt und markieren Abweichungen zwischen konfigurierter und real verbundener Datenbank. Backblaze B2 startet am vollständigen Bucket-Stamm. Dieser PC sowie hinterlegte Laufwerke, Ordner und NAS-Ziele erscheinen in derselben Zielauswahl mit Live-Dateibaum, versteckten/System-Einträgen und Sicherheitsabfragen für Änderungen. Nicht erreichbare oder unvollständig konfigurierte Ziele bleiben sichtbar und werden als solche gekennzeichnet."
+            --notes "1.9.21: Die Zielauswahl im Sicherungsfenster ist eindeutig. Der Haken wird als Freigabe gekennzeichnet, die blaue Zeile als Ziel des aktuellen Backup-Laufs. Ist genau ein Medium freigegeben, wird es beim Start automatisch verwendet, auch wenn zuvor eine deaktivierte Zeile markiert war. Bei mehreren freigegebenen Medien verlangt das Programm weiterhin eine eindeutige Auswahl und nennt die aktiven Ziele."
