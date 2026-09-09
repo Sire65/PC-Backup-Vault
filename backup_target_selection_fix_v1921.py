@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backup_source_selection_safety_v1922 import apply_backup_source_selection_safety_v1922
+
 
 def choose_effective_media(rows: list[dict], selected_id: str | None) -> dict | None:
     """Return the target for this run.
@@ -70,3 +72,4 @@ def apply_backup_target_selection_fix_v1921(WorkbenchClass):
 
     WorkbenchClass.__init__ = __init__
     WorkbenchClass._prepare_selected_target = _prepare_selected_target
+    apply_backup_source_selection_safety_v1922(WorkbenchClass)
