@@ -34,6 +34,7 @@ from cloud_targets_ui_v191 import apply_cloud_targets_v191
 import hidrive_integration_v192 as hidrive_integration_module
 from hidrive_integration_v192 import apply_hidrive_sftp_v192
 from hidrive_tuev_fix_v1913 import apply_hidrive_tuev_fix_v1913, apply_explorer_labels_v1913
+from drive_inventory_tuev_v1924 import apply_drive_inventory_tuev_v1924
 import hidrive_live_explorer_v1914 as hidrive_live_module
 from hidrive_live_explorer_v1914 import apply_hidrive_live_explorer_v1914
 from hidrive_live_safety_v1914 import apply_hidrive_live_safety_v1914
@@ -46,6 +47,7 @@ from context_progress_v1917 import apply_context_progress_v1917
 from context_progress_safety_v1917 import apply_context_progress_safety_v1917
 import storage_center_v1919 as storage_center_module
 from storage_center_v1919 import apply_storage_center_v1919, StorageCenterWindow
+import storage_center_exact_v1920 as storage_center_exact_module
 from storage_center_exact_v1920 import apply_storage_center_exact_v1920
 from storage_center_db_import_v1920 import apply_storage_center_db_import_v1920
 from main_navigation_v1919 import apply_main_navigation_v1919
@@ -58,6 +60,7 @@ from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
 from backup_target_selection_fix_v1921 import apply_backup_target_selection_fix_v1921
 from volume_label_ui_v1912 import apply_volume_labels_v1912
+from drive_inventory_integration_v1924 import apply_drive_inventory_v1924
 import job_archive_safe_v199  # patches archive upserts before the UI/refresh layer is imported
 from job_archive_ui_v198 import apply_job_archive_v198, JobArchiveWindow, JobFilesWindow
 from restore_explorer_v1911 import apply_restore_explorer_v1911
@@ -79,6 +82,7 @@ enable_inventory_backup_handoff(App, BackupAssistant)
 apply_cloud_targets_v191(SettingsWindow, BackupAssistant, storage_v180_module)
 apply_hidrive_sftp_v192(App, cloud_targets_module, cloud_targets_ui_module, storage_v180_module, plan_runner_module)
 apply_hidrive_tuev_fix_v1913(professional_v180_module)
+apply_drive_inventory_tuev_v1924(professional_v180_module)
 apply_hidrive_live_safety_v1914(hidrive_live_module)
 apply_hidrive_tree_explorer_v1915(hidrive_live_module)
 apply_hidrive_tree_selection_safety_v1915(hidrive_live_module)
@@ -114,6 +118,7 @@ apply_context_progress_safety_v1917(context_progress_module, hidrive_live_module
 # root instead of relying on a configured label or default schema.
 apply_storage_center_v1919(App)
 apply_storage_center_exact_v1920(storage_center_module, StorageCenterWindow)
+apply_drive_inventory_v1924(BackupWorkbench, storage_center_exact_module, StorageCenterWindow)
 apply_storage_center_db_import_v1920(StorageCenterWindow)
 apply_main_navigation_v1919(App, StorageCenterWindow)
 apply_test_runtime_fix_v1919(App, SettingsWindow, ui_module, kc_communication_module)

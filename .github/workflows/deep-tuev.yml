@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/project-finder-productive-inventory
+      - main
+      - tuev/deep-consolidation-drive-discovery-1.9.24
     paths:
       - '**.py'
       - 'requirements.txt'
       - 'schema.sql'
+      - 'schema_core_jobs.sql'
       - 'installer/**'
       - '.github/workflows/**'
 
@@ -16,9 +18,14 @@ permissions:
   contents: read
 
 jobs:
-  tuev:
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+  regression:
+    name: Gesamtregression (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - name: Quellcode laden
         uses: actions/checkout@v4
@@ -36,15 +43,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Paketabhängigkeiten prüfen
+        run: python -m pip check
+
       - name: Gesamten Python-Stand kompilieren
         run: python -m compileall -q .
 
-      - name: Alle Regressionstests ausführen
-        run: |
-          python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
-          python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Project-Finder-Regression
+        run: python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
 
-      - name: Version und Installer konsolidieren
+      - name: Vollständige Root-Regression
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Integrations-/Patchkette importieren
+        run: python -c "import app; print('app.py Import/Patchkette PASS')"
+
+      - name: Windows-Laufwerksinventar real prüfen
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @'
+          import os
+          from windows_drive_inventory_v1924 import drive_inventory, normalize_drive_root
+          rows = drive_inventory()
+          for row in rows:
+              print(row['display'], '->', row['root'])
+          if not rows:
+              raise SystemExit('Kein Windows-Laufwerk erkannt')
+          system_drive = normalize_drive_root(os.environ.get('SystemDrive') or 'C:')
+          roots = {str(row['root']).casefold() for row in rows}
+          if system_drive.casefold() not in roots:
+              raise SystemExit(f'Systemlaufwerk fehlt: {system_drive}')
+          print(f'Windows-Laufwerksinventar PASS: {len(rows)} Laufwerk(e)')
+          '@ | python -
+
+      - name: Version, Installer und Releasepfad konsolidieren
+        shell: bash
         run: |
           python - <<'PY'
           import re
@@ -55,23 +89,15 @@ jobs:
           match = re.search(r'#define MyAppVersion "([^"]+)"', iss)
           if not match or match.group(1) != APP_VERSION:
               raise SystemExit('Installer- und Programmversion sind nicht identisch.')
-          if 'Setup.exe.sha256' not in wf or 'Regression' not in wf:
-              raise SystemExit('Release-Workflow enthält nicht alle Update-Sicherheitsgates.')
+          required = ['Setup.exe.sha256', 'Vollständige Regression', 'unittest discover', 'pyinstaller']
+          missing = [item for item in required if item not in wf]
+          if missing:
+              raise SystemExit('Release-Sicherheitsgate fehlt: ' + ', '.join(missing))
           print('Version/Release-Pfad konsistent:', APP_VERSION)
           PY
 
-      - name: Project-Finder-Isolation vom Backup-Kern prüfen
+      - name: Updater-Sicherheitsmerkmale prüfen
         shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --name-only origin/main...HEAD -- backup_engine.py object_store.py dashboard_window.py kc_communication.py vault_db.py verification.py recovery_pass.py | grep -q .; then
-            echo 'Unerwartete Änderungen an geschützten Kernmodulen gegenüber main:'
-            git diff --name-only origin/main...HEAD -- backup_engine.py object_store.py dashboard_window.py kc_communication.py vault_db.py verification.py recovery_pass.py
-            exit 1
-          fi
-          echo 'Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule unverändert.'
-
-      - name: Update-Sicherheitsmerkmale prüfen
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -85,17 +111,30 @@ jobs:
           print('Updater-TÜV: Sicherheitsmerkmale vorhanden.')
           PY
 
+      - name: Geschützte Kernmodule gegen main prüfen
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          protected=(backup_engine.py object_store.py crypto_box.py vault_db.py verification.py recovery_pass.py hidrive_sftp_v192.py)
+          changed="$(git diff --name-only origin/main...HEAD -- "${protected[@]}")"
+          if [ -n "$changed" ]; then
+            echo 'Unerwartete Änderungen an geschützten Backup-/Krypto-/Restore-Kernmodulen:'
+            echo "$changed"
+            exit 1
+          fi
+          echo 'Geschützte Backup-/Krypto-/Restore-Kernmodule unverändert.'
+
       - name: TÜV-Zusammenfassung
         if: always()
         shell: bash
         run: |
-          {
-            echo '## PC Backup Vault Tiefen-TÜV'
-            echo ''
-            echo '- Gesamter Python-Stand kompiliert'
-            echo '- Project-Finder- und Root-Regression ausgeführt'
-            echo '- Programm-/Installer-Version abgeglichen'
-            echo '- Release-Workflow mit SHA-256 und Regression geprüft'
-            echo '- Geschützte Backup-/B2-/Dashboard-/KC-/Restore-Kernmodule gegen main isoliert'
-            echo '- Updater-Sicherheitsmerkmale geprüft'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo '## PC Backup Vault Tiefen-TÜV' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Plattform: ${{ matrix.os }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Gesamter Python-Stand kompiliert' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Project-Finder- und vollständige Root-Regression ausgeführt' >> "$GITHUB_STEP_SUMMARY"
+          echo '- app.py/Patchkette importiert' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Version/Installer/Release-Sicherheitsgates geprüft' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Updater-Sicherheitsmerkmale geprüft' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Windows-Laufwerksinventar wird auf Windows real gegen das Systemlaufwerk geprüft' >> "$GITHUB_STEP_SUMMARY"
