@@ -46,6 +46,7 @@ from context_progress_v1917 import apply_context_progress_v1917
 from context_progress_safety_v1917 import apply_context_progress_safety_v1917
 from storage_center_v1919 import apply_storage_center_v1919, StorageCenterWindow
 from main_navigation_v1919 import apply_main_navigation_v1919
+from test_runtime_fix_v1919 import apply_test_runtime_fix_v1919
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
@@ -58,6 +59,7 @@ from restore_explorer_v1911 import apply_restore_explorer_v1911
 from vault_db import recent_jobs
 from config_store import APP_VERSION
 from kc_backup_bridge_v180 import start_bridge
+import kc_communication as kc_communication_module
 import ui as ui_module
 
 
@@ -100,9 +102,11 @@ apply_explorer_labels_v1913(App, JobArchiveWindow)
 apply_hidrive_live_explorer_v1914(App)
 apply_context_progress_v1917(App, hidrive_live_module, JobArchiveWindow, JobFilesWindow)
 apply_context_progress_safety_v1917(context_progress_module, hidrive_live_module)
-# 1.9.19 is applied last: it only gathers existing backends and reorganizes UI entry points.
+# 1.9.19 is applied last: it only gathers existing backends, reorganizes UI entry points,
+# and makes test windows non-blocking with inline percentage/elapsed-time feedback.
 apply_storage_center_v1919(App)
 apply_main_navigation_v1919(App, StorageCenterWindow)
+apply_test_runtime_fix_v1919(App, SettingsWindow, ui_module, kc_communication_module)
 
 
 def _show_already_running():
