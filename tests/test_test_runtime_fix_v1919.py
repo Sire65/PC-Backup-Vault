@@ -68,13 +68,18 @@ class TestRuntimeFixV1919(unittest.TestCase):
         self.assertIn("E-Mail: FEHLER", summary)
 
     def test_deadline_returns_control(self):
+        # run_with_deadline deliberately enforces a 0.5 s safety floor so an
+        # accidentally tiny/zero timeout cannot cancel diagnostics instantly.
+        # Use a longer simulated hang and verify that control returns at that
+        # floor instead of waiting for the operation itself to finish.
         started = time.monotonic()
-        done, value, error = run_with_deadline(lambda: time.sleep(0.25), 0.05)
+        done, value, error = run_with_deadline(lambda: time.sleep(1.0), 0.05)
         elapsed = time.monotonic() - started
         self.assertFalse(done)
         self.assertIsNone(value)
         self.assertIsInstance(error, TimeoutError)
-        self.assertLess(elapsed, 0.20)
+        self.assertGreaterEqual(elapsed, 0.45)
+        self.assertLess(elapsed, 0.90)
 
     def test_deadline_returns_result(self):
         done, value, error = run_with_deadline(lambda: (True, "OK"), 1)
