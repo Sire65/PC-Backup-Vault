@@ -4,7 +4,7 @@ import keyring
 
 APP_NAME = "PCBackupVault"
 SERVICE = "PC Backup Vault"
-APP_VERSION = "1.9.10"
+APP_VERSION = "1.9.12"
 
 
 def _base_dir() -> Path:
