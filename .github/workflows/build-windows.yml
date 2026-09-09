@@ -85,6 +85,7 @@ jobs:
           python -m unittest -v tests.test_hidrive_account_list_fix_v1918
           python -m unittest -v tests.test_storage_center_v1919
           python -m unittest -v tests.test_main_navigation_v1919
+          python -m unittest -v tests.test_test_runtime_fix_v1919
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
@@ -149,4 +150,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.19: Zentraler Speicher-Explorer für HiDrive, Backblaze B2 sowie Neon/Supabase/PostgreSQL-Projekte. Anbieter/Konten/Projekte werden aus den bestehenden sicheren Stammdaten in einer Combo zusammengeführt. HiDrive und B2 bieten Datei-/Objektaktionen mit Sicherheitsabfragen und Fortschrittsanzeige; Datenbanken bieten Struktur- und Datensatzansicht, CSV/JSON-Export sowie ausdrücklich bestätigten Import, während destruktive Datenbankaktionen gesperrt bleiben. Die Hauptoberfläche wurde ohne Änderung der Backup-/Restore-Engine in Register für Wiederherstellen, Speicher und System/Projekte aufgeräumt."
+            --notes "1.9.19: Zentraler Speicher-Explorer für HiDrive, Backblaze B2 sowie Neon/Supabase/PostgreSQL-Projekte. Anbieter/Konten/Projekte werden aus den bestehenden sicheren Stammdaten in einer Combo zusammengeführt. HiDrive und B2 bieten Datei-/Objektaktionen mit Sicherheitsabfragen und Fortschrittsanzeige; Datenbanken bieten Struktur- und Datensatzansicht, CSV/JSON-Export sowie ausdrücklich bestätigten Import, während destruktive Datenbankaktionen gesperrt bleiben. Die Hauptoberfläche wurde ohne Änderung der Backup-/Restore-Engine in Register für Wiederherstellen, Speicher und System/Projekte aufgeräumt. Zusätzlich sind alle Testfenster gegen Hängen abgesichert und zeigen im vorhandenen Fenster Prozent und Laufzeit; die KC-Antwortauswertung erkennt aktuelle selectedChannels-Antworten korrekt, sodass erfolgreich zugestellte Push-Tests nicht mehr fälschlich als Fehler erscheinen."
