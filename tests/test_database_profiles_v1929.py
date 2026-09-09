@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from database_profiles_v1929 import SUPABASE_PROJECTS, ensure_supabase_profiles, build_supabase_dsn
+from storage_center_exact_v1920 import collect_storage_targets_v1920
 
 
 class FakeStore:
@@ -73,6 +74,15 @@ class DatabaseProfilesV1929Tests(unittest.TestCase):
         self.assertEqual("postgres", matches[0]["database"])
         self.assertTrue(matches[0]["enabled"])
         self.assertTrue(matches[0]["db_host"])
+
+    def test_seeded_supabase_projects_are_visible_in_storage_explorer_without_password(self):
+        store = FakeStore()
+        ensure_supabase_profiles(store)
+        targets = collect_storage_targets_v1920(store, lambda _store: [])
+        db_targets = [t for t in targets if t.get("kind") == "POSTGRES" and t.get("provider") == "supabase"]
+        self.assertEqual(2, len(db_targets))
+        self.assertTrue(all("[Zugang fehlt]" in t.get("label", "") for t in db_targets))
+        self.assertEqual({p["project_ref"] for p in SUPABASE_PROJECTS}, {t["project_ref"] for t in db_targets})
 
     def test_dsn_uses_project_host_ssl_and_escapes_password(self):
         profile = {
