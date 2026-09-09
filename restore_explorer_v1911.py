@@ -47,11 +47,12 @@ def _safe_decrypt(key, value):
 def _folder_parts(path: str):
     p = PureWindowsPath(str(path or ""))
     parts = []
-    if p.drive:
+    drive = str(p.drive or "").strip("\\/")
+    if drive:
         parts.append(p.drive)
     for value in p.parts:
         clean = str(value).strip("\\/")
-        if not clean or value == p.drive:
+        if not clean or (drive and clean.casefold() == drive.casefold()):
             continue
         parts.append(clean)
     return parts or ["(ohne Ordner)"]
