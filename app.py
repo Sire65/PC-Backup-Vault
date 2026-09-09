@@ -40,7 +40,9 @@ from hidrive_live_safety_v1914 import apply_hidrive_live_safety_v1914
 from hidrive_tree_explorer_v1915 import apply_hidrive_tree_explorer_v1915
 from hidrive_tree_selection_safety_v1915 import apply_hidrive_tree_selection_safety_v1915
 from hidrive_hidden_items_v1916 import apply_hidrive_hidden_items_v1916
+import context_progress_v1917 as context_progress_module
 from context_progress_v1917 import apply_context_progress_v1917
+from context_progress_safety_v1917 import apply_context_progress_safety_v1917
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
@@ -93,6 +95,7 @@ apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
 apply_explorer_labels_v1913(App, JobArchiveWindow)
 apply_hidrive_live_explorer_v1914(App)
 apply_context_progress_v1917(App, hidrive_live_module, JobArchiveWindow, JobFilesWindow)
+apply_context_progress_safety_v1917(context_progress_module, hidrive_live_module)
 
 
 def _show_already_running():
