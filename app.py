@@ -52,6 +52,7 @@ from main_navigation_v1919 import apply_main_navigation_v1919
 from test_runtime_fix_v1919 import apply_test_runtime_fix_v1919
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
+from backup_completion_ui_v1923 import apply_backup_completion_ui_v1923
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
 from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
@@ -86,6 +87,7 @@ apply_hidrive_account_list_fix_v1918(hidrive_live_module)
 apply_cloud_target_activation_v192(cloud_targets_ui_module)
 apply_professional_v180(App, BackupAssistant, SettingsWindow, ui_module)
 apply_unified_reporting_v193(App, storage_v180_module, hidrive_integration_module, ui_module)
+apply_backup_completion_ui_v1923(App, ui_module)
 apply_system_image_assistant(BackupAssistant)
 apply_scheduler_release_v183(ui_module)
 apply_all_tests_and_run_now_v180(App, BackupAssistant, ui_module)
