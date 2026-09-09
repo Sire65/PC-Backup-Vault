@@ -78,8 +78,9 @@ jobs:
           '@ | python -
 
       - name: Version, Installer und Releasepfad konsolidieren
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           import re
           from pathlib import Path
           from config_store import APP_VERSION
@@ -93,10 +94,12 @@ jobs:
           if missing:
               raise SystemExit('Release-Sicherheitsgate fehlt: ' + ', '.join(missing))
           print('Version/Release-Pfad konsistent:', APP_VERSION)
+          PY
 
       - name: Updater-Sicherheitsmerkmale prüfen
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
           updater = Path('auto_updater.py').read_text(encoding='utf-8')
           ui = Path('update_ui.py').read_text(encoding='utf-8')
@@ -106,6 +109,7 @@ jobs:
           if missing:
               raise SystemExit('Updater-TÜV fehlt: ' + ', '.join(missing))
           print('Updater-TÜV: Sicherheitsmerkmale vorhanden.')
+          PY
 
       - name: Geschützte Kernmodule gegen main prüfen
         if: runner.os == 'Linux'
