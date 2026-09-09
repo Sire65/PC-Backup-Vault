@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/context-progress-1.9.17
       - feature/hidrive-hidden-items-1.9.16
       - feature/hidrive-tree-explorer-1.9.15
       - feature/hidrive-live-explorer-1.9.14
@@ -78,6 +79,7 @@ jobs:
           python -m unittest -v tests.test_hidrive_tree_explorer_v1915
           python -m unittest -v tests.test_hidrive_tree_selection_safety_v1915
           python -m unittest -v tests.test_hidrive_hidden_items_v1916
+          python -m unittest -v tests.test_context_progress_v1917
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
@@ -142,4 +144,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.16: Der HiDrive Live-Explorer zeigt versteckte bzw. ausgeblendete SFTP-Einträge ausdrücklich mit an. Punkt-Ordner und Punkt-Dateien werden nicht gefiltert und als VERSTECKT markiert; sofern der Server ein zusätzliches Hidden-/DOS-Attribut liefert, wird auch dieses erkannt. .pc-backup-vault wird als VERSTECKT und GESCHÜTZT gekennzeichnet. Die Baumansicht und bestehenden Dateiaktionen bleiben erhalten."
+            --notes "1.9.17: Einheitliche Rechtsklick-Bedienung und sichtbare Arbeitsfortschritte. Der HiDrive Live-Explorer bietet per Kontextmenü Öffnen, Download, Upload, Kopieren, Verschieben, Umbenennen, Löschen, Neuer Ordner, Pfad kopieren und Eigenschaften. Verändernde Aktionen werden ausdrücklich bestätigt; Backup-Bereichsschutz bleibt aktiv. HiDrive-Transfers zeigen aktuelle Datei, Datei- und Bytefortschritt, Geschwindigkeit, Laufzeit, Prozent und geschätzte Restzeit. Backup und Restore behalten ihre bestehenden Fortschrittsanzeigen; Standard-Kontextmenüs stehen zusätzlich in Textfeldern und Tabellen bereit."
