@@ -34,6 +34,7 @@ from cloud_targets_ui_v191 import apply_cloud_targets_v191
 import hidrive_integration_v192 as hidrive_integration_module
 from hidrive_integration_v192 import apply_hidrive_sftp_v192
 from hidrive_tuev_fix_v1913 import apply_hidrive_tuev_fix_v1913, apply_explorer_labels_v1913
+from hidrive_live_explorer_v1914 import apply_hidrive_live_explorer_v1914
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
 from unified_reporting_integration_v193 import apply_unified_reporting_v193
 from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
@@ -80,6 +81,7 @@ apply_volume_labels_v1912(BackupWorkbench)
 apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
 apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
 apply_explorer_labels_v1913(App, JobArchiveWindow)
+apply_hidrive_live_explorer_v1914(App)
 
 
 def _show_already_running():
