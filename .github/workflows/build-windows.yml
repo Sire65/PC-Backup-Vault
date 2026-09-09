@@ -75,6 +75,7 @@ jobs:
           python -m unittest -v tests.test_hidrive_live_explorer_v1914
           python -m unittest -v tests.test_hidrive_live_safety_v1914
           python -m unittest -v tests.test_hidrive_tree_explorer_v1915
+          python -m unittest -v tests.test_hidrive_tree_selection_safety_v1915
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
