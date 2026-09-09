@@ -4,29 +4,32 @@ import os
 from pathlib import PureWindowsPath
 
 
+def _is_drive_letter(drive: str) -> bool:
+    text = str(drive or "")
+    return len(text) == 2 and text[0].isalpha() and text[1] == ":"
+
+
 def normalize_drive_root(path: str) -> str:
-    """Return a Windows drive root such as C:\\ for a drive-backed path."""
+    """Return a Windows drive root such as C:\\ for a drive-letter-backed path."""
     p = PureWindowsPath(str(path or ""))
-    if not p.drive:
+    if not _is_drive_letter(p.drive):
         return str(path or "")
-    return p.drive.rstrip("\\/") + "\\"
+    return p.drive.upper() + "\\"
 
 
 def is_drive_root(path: str) -> bool:
     text = str(path or "")
     p = PureWindowsPath(text)
-    if not p.drive:
+    if not _is_drive_letter(p.drive):
         return False
-    return text.rstrip("\\/").casefold() == p.drive.rstrip("\\/").casefold()
+    return text.rstrip("\\/").casefold() == p.drive.casefold()
 
 
 def get_volume_label(path: str) -> str:
     """Read the Windows volume label without changing or mounting anything."""
-    if os.name != "nt":
+    if os.name != "nt" or not is_drive_root(normalize_drive_root(path)):
         return ""
     root = normalize_drive_root(path)
-    if not root:
-        return ""
     try:
         import ctypes
 
@@ -53,7 +56,7 @@ def get_volume_label(path: str) -> str:
 def format_drive_display(path: str, label: str | None = None) -> str:
     """Human-readable drive label while the caller keeps the original path internally."""
     p = PureWindowsPath(str(path or ""))
-    drive = p.drive.rstrip("\\/") if p.drive else str(path or "").rstrip("\\/")
+    drive = p.drive.upper() if _is_drive_letter(p.drive) else str(path or "").rstrip("\\/")
     resolved_label = get_volume_label(path) if label is None else str(label or "").strip()
     if drive and resolved_label:
         return f"{drive}  {resolved_label}"
