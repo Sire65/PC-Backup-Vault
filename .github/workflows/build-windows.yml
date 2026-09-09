@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - tuev/deep-consolidation-drive-discovery-1.9.24
       - hotfix/hidrive-report-target-progress-1.9.23
       - hotfix/source-selection-safety-1.9.22
       - hotfix/backup-target-selection-1.9.21
@@ -54,6 +55,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+          python -m pip check
       - name: Version konsolidieren
         id: version
         shell: pwsh
@@ -100,11 +102,38 @@ jobs:
           python -m unittest -v tests.test_backup_target_selection_fix_v1921
           python -m unittest -v tests.test_backup_source_selection_safety_v1922
           python -m unittest -v tests.test_backup_completion_ui_v1923
+          python -m unittest -v tests.test_windows_drive_inventory_v1924
+          python -m unittest -v tests.test_drive_inventory_integration_v1924
           python -m unittest -v tests.test_job_archive_v198
           python -m unittest -v tests.test_job_archive_safe_v199
           python -m unittest -v tests.test_restore_progress_v1910
           python -m unittest -v tests.test_restore_explorer_v1911
           python -m unittest -v tests.test_windows_volume_labels_v1912
+      - name: Vollständige Gesamtregression
+        shell: pwsh
+        run: |
+          python -m unittest discover -s project_finder/tests -p "test_*.py" -v
+          python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Windows-Laufwerksinventar real prüfen
+        shell: pwsh
+        run: |
+          @'
+          import os
+          from windows_drive_inventory_v1924 import drive_inventory, normalize_drive_root
+          rows = drive_inventory()
+          for row in rows:
+              print(row['display'], '->', row['root'])
+          if not rows:
+              raise SystemExit('Kein Windows-Laufwerk erkannt')
+          system_drive = normalize_drive_root(os.environ.get('SystemDrive') or 'C:')
+          roots = {str(row['root']).casefold() for row in rows}
+          if system_drive.casefold() not in roots:
+              raise SystemExit(f'Systemlaufwerk fehlt: {system_drive}')
+          print(f'PASS: {len(rows)} Windows-Laufwerk(e) erkannt')
+          '@ | python -
+      - name: App-Integrationskette importieren
+        shell: pwsh
+        run: python -c "import app; print('app.py Import/Patchkette PASS')"
       - name: PC Backup Vault bauen
         shell: pwsh
         run: pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
@@ -158,4 +187,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.23: Nach einem erfolgreichen STRATO-HiDrive-Backup öffnet sich derselbe Backup-Report automatisch wie bei B2/Neon. Der bestehende Geschwindigkeitsmonitor mit Kurve zeigt zusätzlich dauerhaft das konkrete Sicherungsziel einschließlich HiDrive-Konto und Remote-Pfad bzw. B2/Neon-/Dateispeicherziel. Backup-, Restore-, Verschlüsselungs- und Transportlogik bleiben unverändert."
+            --notes "1.9.24: Tiefenkonsolidierung der Abläufe und Windows-Laufwerkserkennung. Quellenauswahl und Speicher-Explorer verwenden dasselbe robuste Laufwerksinventar aus Python-, nativer Windows- und Fallback-Erkennung. Laufwerksname, Typ und Erreichbarkeit werden sichtbar, Rohpfade bleiben unverändert. Der interne TÜV meldet die tatsächlich erkannten Laufwerke. Zusätzlich laufen vollständige Gesamtregression, Patchketten-Import und reale Windows-Laufwerksprobe vor dem Build. Backup-, Restore-, Verschlüsselungs- und Transportkern bleiben unverändert."
