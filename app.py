@@ -57,7 +57,6 @@ from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
 from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
 from backup_target_selection_fix_v1921 import apply_backup_target_selection_fix_v1921
-from backup_source_selection_safety_v1922 import apply_backup_source_selection_safety_v1922
 from volume_label_ui_v1912 import apply_volume_labels_v1912
 import job_archive_safe_v199  # patches archive upserts before the UI/refresh layer is imported
 from job_archive_ui_v198 import apply_job_archive_v198, JobArchiveWindow, JobFilesWindow
@@ -103,7 +102,6 @@ apply_backup_workbench_v194(App, storage_v180_module)
 apply_hotfix_v195(App, BackupWorkbench, APP_VERSION)
 apply_backup_workbench_ui_v196(BackupWorkbench)
 apply_backup_target_selection_fix_v1921(BackupWorkbench)
-apply_backup_source_selection_safety_v1922(BackupWorkbench)
 apply_volume_labels_v1912(BackupWorkbench)
 apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
 apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
