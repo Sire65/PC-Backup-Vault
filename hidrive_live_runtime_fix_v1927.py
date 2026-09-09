@@ -36,13 +36,7 @@ def _looks_like_hidrive(account: dict) -> bool:
 
 
 def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
-    """Resolve HiDrive accounts from the exact runtime sources used by backup/TÜV.
-
-    The filesystem target is authoritative. This intentionally does not read
-    ``store.data['filesystem_targets']`` directly: callers pass the same
-    ``storage_v180._targets`` function used by the professional TÜV, so future
-    target wrappers/migrations cannot make the Live Explorer diverge again.
-    """
+    """Resolve HiDrive accounts from the exact runtime sources used by backup/TÜV."""
     accounts = [dict(x or {}) for x in list(cloud_accounts_func(store) or [])]
     targets = [dict(x or {}) for x in list(targets_func(store) or [])]
 
@@ -65,7 +59,7 @@ def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
         seen.add(key)
         out.append(dict(account))
 
-    # 1) Authoritative path: the same CLOUD-SFTP target used by backup/TÜV.
+    # Authoritative path: exactly the CLOUD-SFTP targets used by backup/TÜV.
     for target in targets:
         if not _is_sftp_target(target):
             continue
@@ -77,8 +71,7 @@ def resolve_hidrive_runtime_accounts(store, targets_func, cloud_accounts_func):
             continue
         add(account)
 
-    # 2) Compatibility path for a configured HiDrive account before a bridge
-    # target has ever been generated.
+    # Compatibility path before a filesystem bridge was ever generated.
     for account in accounts:
         if _looks_like_hidrive(account):
             add(account)
@@ -111,13 +104,7 @@ def _diagnostic_text(diag: dict, version: str) -> str:
 
 
 def apply_hidrive_live_runtime_fix_v1927(live_module, storage_module, cloud_module, app_version: str) -> None:
-    """Bind the HiDrive Live Explorer directly to the working runtime target graph.
-
-    This supersedes older metadata-only account filters and also repairs an
-    already-built disabled combobox after the wrapped Explorer constructor has
-    run. A visible runtime diagnostic remains when no usable account can be
-    resolved, so this state can no longer fail silently.
-    """
+    """Bind the explorer to the same runtime target graph as backup and TÜV."""
     if getattr(live_module, "_hidrive_live_runtime_fix_v1927", False):
         return
 
@@ -127,7 +114,7 @@ def apply_hidrive_live_runtime_fix_v1927(live_module, storage_module, cloud_modu
         )
         return accounts
 
-    # Make the normal constructor path use the authoritative resolver first.
+    # The normal constructor now uses the authoritative resolver directly.
     live_module._hidrive_accounts = runtime_accounts
 
     Explorer = live_module.HiDriveLiveExplorer
@@ -135,6 +122,14 @@ def apply_hidrive_live_runtime_fix_v1927(live_module, storage_module, cloud_modu
 
     def explorer_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
+
+        old_accounts = list(getattr(self, "accounts", []) or [])
+        combo = getattr(self, "account_combo", None)
+        old_index = combo.current() if combo is not None else -1
+        old_id = ""
+        if 0 <= old_index < len(old_accounts):
+            old_id = _text(old_accounts[old_index].get("id"))
+        old_state = _text(combo.cget("state")) if combo is not None else ""
 
         accounts, diag = resolve_hidrive_runtime_accounts(
             self.store, storage_module._targets, cloud_module.cloud_accounts
@@ -147,21 +142,26 @@ def apply_hidrive_live_runtime_fix_v1927(live_module, storage_module, cloud_modu
         except Exception:
             pass
 
-        names = _account_names(accounts)
-        combo = getattr(self, "account_combo", None)
         if combo is None:
             return
 
         if accounts:
-            # Repair a combobox that an older wrapped constructor disabled.
-            combo.configure(values=names, state="readonly")
-            current = combo.current()
-            if current < 0 or current >= len(accounts):
-                combo.current(0)
-            # Ensure home/path/list are initialized even when the wrapped
-            # constructor previously saw zero accounts and skipped switch_account.
-            self.busy = False
-            self.switch_account()
+            combo.configure(values=_account_names(accounts), state="readonly")
+            preferred = next(
+                (i for i, account in enumerate(accounts) if old_id and _text(account.get("id")) == old_id),
+                -1,
+            )
+            if preferred < 0:
+                preferred = old_index if 0 <= old_index < len(accounts) else 0
+            combo.current(preferred)
+
+            # Only repair/init when the wrapped constructor had no usable
+            # account. If it already loaded normally, do not start a second
+            # concurrent SFTP refresh.
+            was_usable = old_state != "disabled" and 0 <= old_index < len(old_accounts)
+            if not was_usable:
+                self.busy = False
+                self.switch_account()
         else:
             combo.configure(values=(), state="disabled")
             try:
