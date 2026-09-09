@@ -50,6 +50,8 @@ from storage_center_v1919 import apply_storage_center_v1919, StorageCenterWindow
 import storage_center_exact_v1920 as storage_center_exact_module
 from storage_center_exact_v1920 import apply_storage_center_exact_v1920
 from storage_center_db_import_v1920 import apply_storage_center_db_import_v1920
+from database_profiles_v1929 import apply_database_profiles_v1929
+from database_profiles_runtime_fix_v1930 import apply_database_profiles_runtime_fix_v1930
 from main_navigation_v1919 import apply_main_navigation_v1919
 from test_runtime_fix_v1919 import apply_test_runtime_fix_v1919
 from cloud_target_activation_v192 import apply_cloud_target_activation_v192
@@ -120,8 +122,12 @@ apply_storage_center_v1919(App)
 apply_storage_center_exact_v1920(storage_center_module, StorageCenterWindow)
 apply_drive_inventory_v1924(BackupWorkbench, storage_center_exact_module, StorageCenterWindow)
 apply_storage_center_db_import_v1920(StorageCenterWindow)
+# Supabase profiles must be wired into the real runtime, not only exist as a module.
+apply_database_profiles_v1929(App, SettingsWindow, StorageCenterWindow)
 apply_main_navigation_v1919(App, StorageCenterWindow)
 apply_test_runtime_fix_v1919(App, SettingsWindow, ui_module, kc_communication_module)
+# Keep this last so the ordinary "Verbindung testen" button accepts a Supabase DB password.
+apply_database_profiles_runtime_fix_v1930(SettingsWindow)
 
 
 def _show_already_running():
