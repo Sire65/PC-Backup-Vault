@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - fix/hidrive-account-list-1.9.18
       - feature/context-progress-1.9.17
       - feature/hidrive-hidden-items-1.9.16
       - feature/hidrive-tree-explorer-1.9.15
@@ -80,6 +81,7 @@ jobs:
           python -m unittest -v tests.test_hidrive_tree_selection_safety_v1915
           python -m unittest -v tests.test_hidrive_hidden_items_v1916
           python -m unittest -v tests.test_context_progress_v1917
+          python -m unittest -v tests.test_hidrive_account_list_fix_v1918
           python -m unittest -v tests.test_dual_hidrive_config_v191
           python -m unittest -v tests.test_cloud_target_activation_v192
           python -m unittest -v tests.test_unified_reporting_v193
@@ -144,4 +146,4 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "PC Backup Vault v$version" `
-            --notes "1.9.17: Einheitliche Rechtsklick-Bedienung und sichtbare Arbeitsfortschritte. Der HiDrive Live-Explorer bietet per Kontextmenü Öffnen, Download, Upload, Kopieren, Verschieben, Umbenennen, Löschen, Neuer Ordner, Pfad kopieren und Eigenschaften. Verändernde Aktionen werden ausdrücklich bestätigt; Backup-Bereichsschutz bleibt aktiv. HiDrive-Transfers zeigen aktuelle Datei, Datei- und Bytefortschritt, Geschwindigkeit, Laufzeit, Prozent und geschätzte Restzeit. Backup und Restore behalten ihre bestehenden Fortschrittsanzeigen; Standard-Kontextmenüs stehen zusätzlich in Textfeldern und Tabellen bereit."
+            --notes "1.9.18: Der HiDrive Live-Explorer zeigt alle aktiven STRATO-HiDrive-Konten in der Konto-Combo an. Ältere Kontoeinträge werden nicht mehr ausgeblendet, nur weil in ihrer gespeicherten Methodenliste SFTP fehlt oder eine andere bevorzugte Methode eingetragen ist. Die tatsächliche Verbindung nutzt weiterhin den bestehenden sicheren SFTP-Transport und wird erst beim Öffnen des gewählten Kontos geprüft."
