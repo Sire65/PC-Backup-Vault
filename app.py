@@ -38,7 +38,8 @@ from backup_workbench_v194 import apply_backup_workbench_v194, BackupWorkbench
 from hotfix_v195 import apply_hotfix_v195
 from backup_workbench_ui_v196 import apply_backup_workbench_ui_v196
 import job_archive_safe_v199  # patches archive upserts before the UI/refresh layer is imported
-from job_archive_ui_v198 import apply_job_archive_v198
+from job_archive_ui_v198 import apply_job_archive_v198, JobArchiveWindow
+from restore_explorer_v1911 import apply_restore_explorer_v1911
 from vault_db import recent_jobs
 from config_store import APP_VERSION
 from kc_backup_bridge_v180 import start_bridge
@@ -72,6 +73,7 @@ apply_backup_workbench_v194(App, storage_v180_module)
 apply_hotfix_v195(App, BackupWorkbench, APP_VERSION)
 apply_backup_workbench_ui_v196(BackupWorkbench)
 apply_job_archive_v198(App, RestoreAssistant, BackupWorkbench, recent_jobs)
+apply_restore_explorer_v1911(JobArchiveWindow, RestoreAssistant)
 
 
 def _show_already_running():
