@@ -43,21 +43,28 @@ def _sftp_target_account_ids(store) -> set[str]:
 
 
 def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
-    """Return every active account that the existing HiDrive SFTP transport can open."""
+    """Return every HiDrive account usable by the existing SFTP transport.
+
+    A generated CLOUD-SFTP target is authoritative. Older installations can
+    retain ``enabled=false`` on the account row even though the target and SFTP
+    credentials remain valid. Such target-backed accounts stay visible. A
+    disabled account without an SFTP target remains excluded.
+    """
     sftp_target_ids = _sftp_target_account_ids(store)
     out: list[dict] = []
     seen: set[str] = set()
 
     for raw in cloud_accounts_func(store):
         account = dict(raw or {})
-        if account.get("enabled", True) is False:
+        account_id = str(account.get("id") or "").strip()
+        has_live_sftp_target = bool(account_id and account_id in sftp_target_ids)
+
+        if account.get("enabled", True) is False and not has_live_sftp_target:
             continue
 
-        account_id = str(account.get("id") or "").strip()
         provider_code = str(account.get("provider_code") or "").upper()
         explicit_strato = provider_code == "STRATO_HIDRIVE"
         legacy_strato = _looks_like_strato_hidrive(account)
-        has_live_sftp_target = bool(account_id and account_id in sftp_target_ids)
         if not (explicit_strato or legacy_strato or has_live_sftp_target):
             continue
 
@@ -71,7 +78,7 @@ def eligible_hidrive_accounts(store, cloud_accounts_func) -> list[dict]:
 
 
 def apply_hidrive_account_list_fix_v1918(live_module) -> None:
-    """Install legacy compatibility plus the authoritative 1.9.27 runtime resolver."""
+    """Install compatibility plus the authoritative runtime resolver."""
     if getattr(live_module, "_hidrive_account_list_fix_v1918", False):
         return
 
@@ -81,8 +88,8 @@ def apply_hidrive_account_list_fix_v1918(live_module) -> None:
     live_module._hidrive_accounts = _hidrive_accounts
     live_module._hidrive_account_list_fix_v1918 = True
 
-    # 1.9.27: bind the actual explorer window to the same runtime target graph
-    # used by backup and TÜV, and repair an already-disabled combo after init.
+    # Bind the actual explorer window to the same runtime target graph used by
+    # backup and TÜV, and repair an already-disabled combo after init.
     apply_hidrive_live_runtime_fix_v1927(
         live_module,
         storage_v180_module,
