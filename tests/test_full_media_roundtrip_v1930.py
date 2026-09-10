@@ -14,7 +14,7 @@ from unittest import mock
 import backup_engine
 import hidrive_sftp_v192
 from archive_restore_v198 import _restore_manifest_local, _restore_manifest_sftp
-from crypto_box import create_key_b64, decrypt_bytes, sha256_bytes
+from crypto_box import create_key_b64, decrypt_bytes, encrypt_bytes, encrypt_text, sha256_bytes
 from storage_v180 import VAULT_DIR, filesystem_backup
 
 
@@ -80,6 +80,48 @@ class FakeSFTP:
     rename = posix_rename
 
 
+class FakeRestoreConn:
+    def __init__(self, file_row, chunks):
+        self.file_row = file_row
+        self.chunks = chunks
+        self.last_sql = ""
+        self.restore_inserts = []
+        self.commits = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None):
+        self.last_sql = " ".join(str(sql).split()).lower()
+        if self.last_sql.startswith("insert into backup_vault.restore_tests"):
+            self.restore_inserts.append(params)
+        return self
+
+    def fetchone(self):
+        if "from backup_vault.files where id=" in self.last_sql:
+            return self.file_row
+        return None
+
+    def fetchall(self):
+        if "from backup_vault.file_chunks" in self.last_sql:
+            return self.chunks
+        return []
+
+    def commit(self):
+        self.commits += 1
+
+
+class FakeRestoreB2:
+    def __init__(self, objects):
+        self.objects = dict(objects)
+
+    def get(self, key):
+        return self.objects[key]
+
+
 def _restored_file(root: Path, name: str) -> Path:
     matches = list(root.rglob(name))
     if len(matches) != 1:
@@ -125,6 +167,24 @@ class FullMediaRoundtrip1930Tests(unittest.TestCase):
             chunk.write_bytes(bytes(damaged))
             with self.assertRaises(RuntimeError):
                 _restore_manifest_local(app, manifest, vault, root / "restore-damaged")
+
+    def test_drive_folder_and_nas_targets_use_verified_roundtrip_engine(self):
+        app = _App()
+        for kind in ("ORDNER", "LAUFWERK", "NAS"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                source = root / f"{kind.lower()}.txt"
+                original = f"Roundtrip {kind}".encode("utf-8")
+                source.write_bytes(original)
+                target_root = root / "target"
+                target_root.mkdir()
+                result = filesystem_backup(app, [source], {"id": kind, "name": kind, "path": str(target_root), "kind": kind})
+                vault = target_root / VAULT_DIR
+                manifest = json.loads((vault / "jobs" / f"{result['job_id']}.json").read_text(encoding="utf-8"))
+                restore_root = root / "restore"
+                restored = _restore_manifest_local(app, manifest, vault, restore_root)
+                self.assertEqual(restored["files"], 1)
+                self.assertEqual(_restored_file(restore_root, source.name).read_bytes(), original)
 
     def test_hidrive_sftp_backup_restore_roundtrip(self):
         app = _App()
@@ -204,6 +264,58 @@ class FullMediaRoundtrip1930Tests(unittest.TestCase):
         damaged = bytearray(store.objects[first[4]])
         damaged[-1] ^= 1
         self.assertNotEqual(sha256_bytes(bytes(damaged)), first[2])
+
+    def _database_restore_case(self, backend: str):
+        key = create_key_b64()
+        original = (f"{backend}-Restore über echte restore_file-Routine\n".encode("utf-8")) * 50
+        file_sha = hashlib.sha256(original).hexdigest()
+        nonce, cipher = encrypt_bytes(key, original, f"{file_sha}:0".encode("ascii"))
+        cipher_sha = sha256_bytes(cipher)
+        file_row = (
+            "file-1", encrypt_text(key, f"{backend.lower()}-restore.txt"), file_sha,
+            "NONE", "STORED", len(original), "job-1", backend,
+        )
+        object_key = "pcbv/test/object.bin" if backend == "B2" else None
+        encrypted_data = None if backend == "B2" else cipher
+        chunks = [(0, nonce, encrypted_data, cipher_sha, backend, object_key)]
+        conn = FakeRestoreConn(file_row, chunks)
+        b2 = FakeRestoreB2({object_key: cipher}) if backend == "B2" else None
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(backup_engine.psycopg, "connect", return_value=conn), \
+             mock.patch("backup_engine.make_b2_store", return_value=b2):
+            dest = Path(tmp) / "restore"
+            out = backup_engine.restore_file("test-dsn", key, "file-1", dest, object_store_config={})
+            self.assertEqual(out.read_bytes(), original)
+            self.assertEqual(hashlib.sha256(out.read_bytes()).hexdigest(), file_sha)
+            self.assertFalse(list(dest.rglob("*.part")))
+        self.assertTrue(conn.restore_inserts)
+        self.assertGreaterEqual(conn.commits, 1)
+
+    def test_neon_database_restore_real_codepath(self):
+        self._database_restore_case("NEON")
+
+    def test_b2_database_restore_real_codepath(self):
+        self._database_restore_case("B2")
+
+    def test_b2_restore_rejects_corrupted_object_and_removes_part_file(self):
+        key = create_key_b64()
+        original = b"B2 damaged restore test" * 100
+        file_sha = hashlib.sha256(original).hexdigest()
+        nonce, cipher = encrypt_bytes(key, original, f"{file_sha}:0".encode("ascii"))
+        cipher_sha = sha256_bytes(cipher)
+        damaged = bytearray(cipher)
+        damaged[-1] ^= 1
+        file_row = ("file-1", encrypt_text(key, "damaged.txt"), file_sha, "NONE", "STORED", len(original), "job-1", "B2")
+        conn = FakeRestoreConn(file_row, [(0, nonce, None, cipher_sha, "B2", "obj")])
+        b2 = FakeRestoreB2({"obj": bytes(damaged)})
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(backup_engine.psycopg, "connect", return_value=conn), \
+             mock.patch("backup_engine.make_b2_store", return_value=b2):
+            dest = Path(tmp) / "restore"
+            with self.assertRaises(ValueError):
+                backup_engine.restore_file("test-dsn", key, "file-1", dest, object_store_config={})
+            self.assertFalse(list(dest.rglob("*.part")))
 
     def test_supported_backup_target_matrix_is_explicit(self):
         # B2 and Neon are the two database-backed payload choices.
