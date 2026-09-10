@@ -1,0 +1,119 @@
+name: PC Backup Vault Vollmedien-Roundtrip-TÜV
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - tuev/full-media-roundtrip-1.9.30
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - 'schema.sql'
+      - 'schema_core_jobs.sql'
+      - 'installer/**'
+      - '.github/workflows/full-media-roundtrip-tuev.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Vollmedien-Regressionsmatrix (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m pip check
+      - name: Gesamten Python-Stand kompilieren
+        run: python -m compileall -q .
+      - name: Backup-/Restore-Medienroundtrips
+        run: python -m unittest -v tests.test_full_media_roundtrip_v1930
+      - name: Vollständige Root-Regression
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Project-Finder-Regression
+        run: python -m unittest discover -s project_finder/tests -p 'test_*.py' -v
+      - name: App-Integrations-/Patchkette
+        run: python -c "import app; print('app.py Import/Patchkette PASS')"
+      - name: Windows-Laufwerksinventar real prüfen
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @'
+          import os
+          from windows_drive_inventory_v1924 import drive_inventory, normalize_drive_root
+          rows = drive_inventory()
+          for row in rows:
+              print(row['display'], '->', row['root'])
+          if not rows:
+              raise SystemExit('Kein Windows-Laufwerk erkannt')
+          system_drive = normalize_drive_root(os.environ.get('SystemDrive') or 'C:')
+          roots = {str(row['root']).casefold() for row in rows}
+          if system_drive.casefold() not in roots:
+              raise SystemExit(f'Systemlaufwerk fehlt: {system_drive}')
+          print(f'Windows-Laufwerksinventar PASS: {len(rows)} Laufwerk(e)')
+          '@ | python -
+      - name: Kernmodule gegen main unverändert
+        shell: bash
+        run: |
+          set -euo pipefail
+          protected=(backup_engine.py object_store.py crypto_box.py vault_db.py verification.py recovery_pass.py hidrive_sftp_v192.py storage_v180.py archive_restore_v198.py)
+          changed="$(git diff --name-only origin/main...HEAD -- "${protected[@]}")"
+          if [ -n "$changed" ]; then
+            echo 'STOP: Produktive Backup-/Restore-Kernmodule wurden im TÜV-Zweig verändert:'
+            echo "$changed"
+            exit 1
+          fi
+          echo 'PASS: Produktive Backup-/Restore-Kernmodule unverändert.'
+
+  windows-package:
+    name: Windows-Paket aus unverändertem Produktivcode
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Abhängigkeiten installieren
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          python -m pip check
+      - name: Regression vor Paketbau
+        shell: pwsh
+        run: |
+          python -m unittest -v tests.test_full_media_roundtrip_v1930
+          python -m unittest discover -s tests -p "test_*.py" -v
+      - name: EXE bauen
+        shell: pwsh
+        run: pyinstaller --noconfirm --clean --windowed --name "PC_Backup_Vault" --hidden-import "matplotlib.backends.backend_tkagg" --collect-all boto3 --collect-all botocore --collect-all qrcode --collect-all paramiko --add-data "schema.sql;." --add-data "schema_core_jobs.sql;." app.py
+      - name: Inno Setup installieren
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Windows Setup Probe bauen
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\PC_Backup_Vault.iss"
+          if (-not (Test-Path "installer\output\PC_Backup_Vault_1.9.30_Setup.exe")) { throw "Setup-Probe wurde nicht erzeugt" }
+          (Get-FileHash "installer\output\PC_Backup_Vault_1.9.30_Setup.exe" -Algorithm SHA256).Hash.ToLower()
