@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import tkinter as tk
 from tkinter import ttk
+from status_bus import state as bus_state
 
 
 def _human_rate(n):
@@ -97,18 +98,38 @@ def apply_transfer_monitor(AppClass):
             if old and old.winfo_exists(): old.destroy()
         except Exception:pass
         self._transfer_monitor_v180=TransferMonitor(self)
+        try:
+            bus_state("backup", "running", "Backup wird vorbereitet", {"files_done":0,"files_total":0,"bytes_done":0,"bytes_total":0,"speed_bps":0,"percent":0})
+        except Exception:pass
         return control
 
     def _progress(self,d,t,m,metrics=None):
         result=original_progress(self,d,t,m,metrics)
+        metrics=dict(metrics or {})
         mon=getattr(self,"_transfer_monitor_v180",None)
         try:
-            if mon and mon.winfo_exists(): mon.update_metrics(d,t,m,metrics or {})
+            if mon and mon.winfo_exists(): mon.update_metrics(d,t,m,metrics)
+        except Exception:pass
+        try:
+            done=int(metrics.get("bytes_done") or 0); total=int(metrics.get("bytes_total") or 0)
+            elapsed=float(metrics.get("elapsed") or 0); speed=float(metrics.get("speed_bps") or 0)
+            if speed<=0 and elapsed>0 and done>0: speed=done/elapsed
+            pct=(done/total*100) if total else ((d/t*100) if t else 0)
+            bus_state("backup", "running", str(m or metrics.get("phase") or "Backup läuft"), {
+                "files_done":int(d or 0), "files_total":int(t or 0),
+                "bytes_done":done, "bytes_total":total,
+                "speed_bps":speed, "percent":max(0,min(100,pct)),
+                "elapsed":elapsed, "eta_seconds":metrics.get("eta_seconds"),
+                "phase":metrics.get("phase"), "target":metrics.get("target") or metrics.get("backup_target")
+            })
         except Exception:pass
         return result
 
     def _set_backup_running(self,running):
         result=original_set(self,running)
+        try:
+            bus_state("backup", "running" if running else "idle", "Backup läuft" if running else "Backup beendet")
+        except Exception:pass
         if not running:
             mon=getattr(self,"_transfer_monitor_v180",None)
             try:
