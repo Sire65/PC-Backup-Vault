@@ -7,7 +7,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 from config_store import APP_VERSION
-from status_bus import subscribe
+from status_bus import subscribe, snapshot as status_snapshot
 from storage_health_v193 import collect_storage_health
 from vault_db import recent_jobs, recent_restore_tests, recent_verifications
 
@@ -89,6 +89,36 @@ def _latest_snapshot(dsn: str) -> dict:
     }
 
 
+def _with_runtime(payload: dict) -> dict:
+    out = dict(payload)
+    try:
+        snap = status_snapshot() or {}
+        state = dict(snap.get("state") or {})
+        runtime = dict(state.get("backup") or {})
+        at = float(runtime.get("at") or 0)
+        # Runtime state wins only while it is fresh. This prevents a crashed or
+        # interrupted client from leaving KC Check permanently at RUNNING.
+        if runtime and at and (time.time() - at) <= 120:
+            level = str(runtime.get("level") or "").lower()
+            details = dict(runtime.get("runtime") or {})
+            if level in {"running", "active"}:
+                out["status"] = "RUNNING"
+                out["lastBackupStatus"] = "RUNNING"
+                out["measuredAt"] = datetime.now(timezone.utc).isoformat()
+                if details.get("bytes_done") is not None:
+                    out["lastBackupBytes"] = int(details.get("bytes_done") or 0)
+                if details.get("files_done") is not None:
+                    out["lastBackupFiles"] = int(details.get("files_done") or 0)
+                if details.get("target"):
+                    out["backupTarget"] = str(details.get("target"))[:40]
+                merged = dict(out.get("details") or {})
+                merged["runtime"] = details
+                out["details"] = merged
+    except Exception:
+        pass
+    return out
+
+
 def _with_storage_targets(store, payload: dict) -> dict:
     out = dict(payload)
     try:
@@ -144,7 +174,7 @@ class BackupTelemetryReporter:
         self._thread.start()
 
     def _on_status(self, service: str, event: str, payload: dict):
-        if str(service).lower() in {"neon", "b2", "verify", "vault", "kc"}:
+        if str(service).lower() in {"backup", "neon", "b2", "verify", "vault", "kc"}:
             self._wake.set()
 
     def _pulse(self, success=None):
@@ -162,7 +192,7 @@ class BackupTelemetryReporter:
             if not dsn:
                 self._pulse(False)
                 return False
-            payload = _with_storage_targets(self.store, _latest_snapshot(dsn))
+            payload = _with_storage_targets(self.store, _with_runtime(_latest_snapshot(dsn)))
             ok = _post(self.store, payload)
             self._pulse(ok)
             return ok
