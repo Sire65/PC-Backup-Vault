@@ -40,9 +40,11 @@ def activity(service: str, operation: str = "data", detail: str = ""):
     _notify(key, "activity", payload)
 
 
-def state(service: str, level: str, detail: str = ""):
+def state(service: str, level: str, detail: str = "", runtime: dict | None = None):
     key = str(service or "").lower()
     payload = {"level": str(level or "unknown").lower(), "detail": detail, "at": time.time()}
+    if runtime:
+        payload["runtime"] = dict(runtime)
     with _lock:
         _last_state[key] = payload
     _notify(key, "state", payload)
