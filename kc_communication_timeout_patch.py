@@ -1,8 +1,8 @@
 """Runtime patch for KC Communication transport timeouts.
 
-Keeps status/pairing checks on the configured short timeout while giving real
-emit operations a separate response budget. This module is intentionally
-small so it can be reviewed independently before release integration.
+Status/pairing checks keep the configured short timeout. Real emit operations
+get a separate response budget that still stays below the existing 15-second
+UI diagnostic deadline.
 """
 from __future__ import annotations
 
@@ -14,21 +14,17 @@ from config_store import APP_NAME, APP_VERSION
 import kc_communication as _kc
 
 STATUS_TIMEOUT_SECONDS = 8
-EMIT_TIMEOUT_SECONDS = 25
+EMIT_TIMEOUT_SECONDS = 12
 
 
 def _post_with_action_timeout(self, payload: dict, authenticated: bool = True) -> dict:
     url = (self.endpoint_url or _kc.DEFAULT_MACHINE_ENDPOINT).strip()
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "User-Agent": f"{APP_NAME}/{APP_VERSION}",
-    }
+    headers = {"Content-Type": "application/json; charset=utf-8", "User-Agent": f"{APP_NAME}/{APP_VERSION}"}
     if authenticated:
         if not self.token:
             raise _kc.KCCommunicationError("KC-Geräte-Token fehlt.")
         headers["x-pbv-device-token"] = self.token
-
     action = str(payload.get("action") or "event").lower()
     timeout = EMIT_TIMEOUT_SECONDS if action == "emit" else max(2, int(self.timeout or STATUS_TIMEOUT_SECONDS))
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -45,15 +41,12 @@ def _post_with_action_timeout(self, payload: dict, authenticated: bool = True) -
         obj = {}
         try:
             parsed = json.loads(raw_detail or "{}")
-            if isinstance(parsed, dict):
-                obj = parsed
+            if isinstance(parsed, dict): obj = parsed
         except Exception:
             pass
         detail = str(obj.get("error") or obj.get("detail") or obj.get("message") or raw_detail or f"HTTP {exc.code}")
         raise _kc.KCCommunicationError(f"HTTP {exc.code}: {_kc._safe_text(detail,300)}", exc.code, obj) from exc
     except TimeoutError as exc:
-        # A client-side response timeout does not prove that the downstream
-        # provider failed. Avoid recording a false provider failure here.
         msg = f"Serverantwort nach {timeout} s noch nicht eingetroffen; Versandstatus unbekannt."
         _kc.state("kc", "warn", msg)
         raise _kc.KCCommunicationError(msg) from exc
@@ -68,7 +61,6 @@ def _post_with_action_timeout(self, payload: dict, authenticated: bool = True) -
 
 
 def apply_kc_communication_timeout_patch() -> None:
-    if getattr(_kc.KCCommunicationClient, "_kc_timeout_patch_v1932", False):
-        return
+    if getattr(_kc.KCCommunicationClient, "_kc_timeout_patch_v1932", False): return
     _kc.KCCommunicationClient._post = _post_with_action_timeout
     _kc.KCCommunicationClient._kc_timeout_patch_v1932 = True
