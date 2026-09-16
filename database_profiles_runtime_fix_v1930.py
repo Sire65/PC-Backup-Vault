@@ -3,6 +3,11 @@ from __future__ import annotations
 from tkinter import messagebox
 
 from database_profiles_v1929 import build_supabase_dsn
+from kc_communication_timeout_patch import apply_kc_communication_timeout_patch
+
+# Apply before app.py wires the communication status/test UI. This keeps the
+# integration additive and avoids rewriting the large kc_communication module.
+apply_kc_communication_timeout_patch()
 
 
 def looks_like_postgres_dsn(value: str) -> bool:
