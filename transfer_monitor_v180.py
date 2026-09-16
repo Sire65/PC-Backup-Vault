@@ -93,13 +93,14 @@ def apply_transfer_monitor(AppClass):
 
     def _begin_backup_control(self):
         control=original_begin(self)
+        self._backup_last_runtime_v1933={"files_done":0,"files_total":0,"bytes_done":0,"bytes_total":0,"speed_bps":0,"percent":0}
         try:
             old=getattr(self,"_transfer_monitor_v180",None)
             if old and old.winfo_exists(): old.destroy()
         except Exception:pass
         self._transfer_monitor_v180=TransferMonitor(self)
         try:
-            bus_state("backup", "running", "Backup wird vorbereitet", {"files_done":0,"files_total":0,"bytes_done":0,"bytes_total":0,"speed_bps":0,"percent":0})
+            bus_state("backup", "running", "Backup wird vorbereitet", dict(self._backup_last_runtime_v1933))
         except Exception:pass
         return control
 
@@ -115,20 +116,31 @@ def apply_transfer_monitor(AppClass):
             elapsed=float(metrics.get("elapsed") or 0); speed=float(metrics.get("speed_bps") or 0)
             if speed<=0 and elapsed>0 and done>0: speed=done/elapsed
             pct=(done/total*100) if total else ((d/t*100) if t else 0)
-            bus_state("backup", "running", str(m or metrics.get("phase") or "Backup läuft"), {
+            runtime={
                 "files_done":int(d or 0), "files_total":int(t or 0),
                 "bytes_done":done, "bytes_total":total,
                 "speed_bps":speed, "percent":max(0,min(100,pct)),
                 "elapsed":elapsed, "eta_seconds":metrics.get("eta_seconds"),
                 "phase":metrics.get("phase"), "target":metrics.get("target") or metrics.get("backup_target")
-            })
+            }
+            self._backup_last_runtime_v1933=dict(runtime)
+            bus_state("backup", "running", str(m or metrics.get("phase") or "Backup läuft"), runtime)
         except Exception:pass
         return result
 
     def _set_backup_running(self,running):
         result=original_set(self,running)
         try:
-            bus_state("backup", "running" if running else "idle", "Backup läuft" if running else "Backup beendet")
+            if running:
+                runtime=dict(getattr(self,"_backup_last_runtime_v1933",{}) or {})
+                bus_state("backup", "running", "Backup läuft", runtime)
+            else:
+                runtime=dict(getattr(self,"_backup_last_runtime_v1933",{}) or {})
+                runtime["completed_at"]=time.time()
+                runtime["eta_seconds"]=0
+                if runtime.get("files_total") and runtime.get("files_done",0) >= runtime.get("files_total",0):
+                    runtime["percent"]=100.0
+                bus_state("backup", "success", "Backup erfolgreich beendet", runtime)
         except Exception:pass
         if not running:
             mon=getattr(self,"_transfer_monitor_v180",None)
