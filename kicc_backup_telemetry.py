@@ -16,205 +16,98 @@ SOURCE_PROGRAM = "pc-backup-vault"
 
 
 def _iso(value):
-    if value is None:
-        return None
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    try:
-        return datetime.fromisoformat(str(value)).isoformat()
-    except Exception:
-        return None
+    if value is None: return None
+    if hasattr(value, "isoformat"): return value.isoformat()
+    try: return datetime.fromisoformat(str(value)).isoformat()
+    except Exception: return None
 
 
 def _safe_status(value, allowed, fallback="UNKNOWN"):
-    text = str(value or "").upper()
-    return text if text in allowed else fallback
+    text = str(value or "").upper(); return text if text in allowed else fallback
 
 
 def _latest_snapshot(dsn: str) -> dict:
-    jobs = list(recent_jobs(dsn, 20) or [])
-    verifies = list(recent_verifications(dsn, 20) or [])
-    restores = list(recent_restore_tests(dsn, 20) or [])
-
-    job = jobs[0] if jobs else None
-    verify = verifies[0] if verifies else None
-    restore = restores[0] if restores else None
-
-    last_backup_at = _iso(job[2] if job and len(job) > 2 else None) or _iso(job[1] if job and len(job) > 1 else None)
-    backup_status = _safe_status(job[3] if job and len(job) > 3 else None,
-                                 {"SUCCESS", "FAILED", "PARTIAL", "CANCELLED", "INTERRUPTED", "RUNNING", "BLOCKED_LIMIT"})
-    verify_result = _safe_status(verify[5] if verify and len(verify) > 5 else None, {"PASS", "WARN", "FAIL"})
-    restore_result = _safe_status(restore[1] if restore and len(restore) > 1 else None, {"PASS", "WARN", "FAIL", "SUCCESS", "FAILED"})
-
-    if backup_status in {"FAILED", "INTERRUPTED", "BLOCKED_LIMIT"} or verify_result == "FAIL" or restore_result in {"FAIL", "FAILED"}:
-        status = "FAILED"
-    elif backup_status in {"PARTIAL", "CANCELLED", "RUNNING"} or verify_result in {"WARN", "UNKNOWN"}:
-        status = "DEGRADED"
-    elif backup_status == "SUCCESS" and verify_result == "PASS":
-        status = "HEALTHY"
-    else:
-        status = "UNKNOWN"
-
-    rpo_seconds = None
+    jobs=list(recent_jobs(dsn,20) or []); verifies=list(recent_verifications(dsn,20) or []); restores=list(recent_restore_tests(dsn,20) or [])
+    job=jobs[0] if jobs else None; verify=verifies[0] if verifies else None; restore=restores[0] if restores else None
+    last_backup_at=_iso(job[2] if job and len(job)>2 else None) or _iso(job[1] if job and len(job)>1 else None)
+    backup_status=_safe_status(job[3] if job and len(job)>3 else None,{"SUCCESS","FAILED","PARTIAL","CANCELLED","INTERRUPTED","RUNNING","BLOCKED_LIMIT"})
+    verify_result=_safe_status(verify[5] if verify and len(verify)>5 else None,{"PASS","WARN","FAIL"})
+    restore_result=_safe_status(restore[1] if restore and len(restore)>1 else None,{"PASS","WARN","FAIL","SUCCESS","FAILED"})
+    if backup_status in {"FAILED","INTERRUPTED","BLOCKED_LIMIT"} or verify_result=="FAIL" or restore_result in {"FAIL","FAILED"}: status="FAILED"
+    elif backup_status in {"PARTIAL","CANCELLED","RUNNING"} or verify_result in {"WARN","UNKNOWN"}: status="DEGRADED"
+    elif backup_status=="SUCCESS" and verify_result=="PASS": status="HEALTHY"
+    else: status="UNKNOWN"
+    rpo_seconds=None
     if last_backup_at:
         try:
-            dt = datetime.fromisoformat(last_backup_at.replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            rpo_seconds = max(0, int((datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()))
-        except Exception:
-            pass
-
-    return {
-        "sourceProgram": SOURCE_PROGRAM,
-        "appVersion": APP_VERSION,
-        "status": status,
-        "measuredAt": datetime.now(timezone.utc).isoformat(),
-        "lastBackupAt": last_backup_at,
-        "lastBackupStatus": backup_status,
-        "lastBackupBytes": int(job[6] or 0) if job and len(job) > 6 else None,
-        "lastBackupFiles": int(job[4] or 0) if job and len(job) > 4 else None,
-        "backupTarget": str(job[15] or "")[:40] if job and len(job) > 15 else None,
-        "lastVerifyAt": _iso(verify[4] if verify and len(verify) > 4 else None),
-        "lastVerifyResult": verify_result,
-        "lastRestoreTestAt": _iso(restore[0] if restore and len(restore) > 0 else None),
-        "lastRestoreTestResult": restore_result,
-        "integrityStatus": verify_result,
-        "rpoSeconds": rpo_seconds,
-        "rtoSeconds": None,
-        "details": {
-            "backupMode": str(job[11] or "")[:40] if job and len(job) > 11 else "",
-            "triggerType": str(job[9] or "")[:40] if job and len(job) > 9 else "",
-        },
-    }
+            dt=datetime.fromisoformat(last_backup_at.replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            rpo_seconds=max(0,int((datetime.now(timezone.utc)-dt.astimezone(timezone.utc)).total_seconds()))
+        except Exception: pass
+    return {"sourceProgram":SOURCE_PROGRAM,"appVersion":APP_VERSION,"status":status,"measuredAt":datetime.now(timezone.utc).isoformat(),"lastBackupAt":last_backup_at,"lastBackupStatus":backup_status,"lastBackupBytes":int(job[6] or 0) if job and len(job)>6 else None,"lastBackupFiles":int(job[4] or 0) if job and len(job)>4 else None,"backupTarget":str(job[15] or "")[:40] if job and len(job)>15 else None,"lastVerifyAt":_iso(verify[4] if verify and len(verify)>4 else None),"lastVerifyResult":verify_result,"lastRestoreTestAt":_iso(restore[0] if restore and len(restore)>0 else None),"lastRestoreTestResult":restore_result,"integrityStatus":verify_result,"rpoSeconds":rpo_seconds,"rtoSeconds":None,"details":{"backupMode":str(job[11] or "")[:40] if job and len(job)>11 else "","triggerType":str(job[9] or "")[:40] if job and len(job)>9 else ""}}
 
 
 def _with_runtime(payload: dict) -> dict:
-    out = dict(payload)
+    out=dict(payload)
     try:
-        snap = status_snapshot() or {}
-        state = dict(snap.get("state") or {})
-        runtime = dict(state.get("backup") or {})
-        at = float(runtime.get("at") or 0)
-        # Runtime state wins only while it is fresh. This prevents a crashed or
-        # interrupted client from leaving KC Check permanently at RUNNING.
-        if runtime and at and (time.time() - at) <= 120:
-            level = str(runtime.get("level") or "").lower()
-            details = dict(runtime.get("runtime") or {})
-            if level in {"running", "active"}:
-                out["status"] = "RUNNING"
-                out["lastBackupStatus"] = "RUNNING"
-                out["measuredAt"] = datetime.now(timezone.utc).isoformat()
-                if details.get("bytes_done") is not None:
-                    out["lastBackupBytes"] = int(details.get("bytes_done") or 0)
-                if details.get("files_done") is not None:
-                    out["lastBackupFiles"] = int(details.get("files_done") or 0)
-                if details.get("target"):
-                    out["backupTarget"] = str(details.get("target"))[:40]
-                merged = dict(out.get("details") or {})
-                merged["runtime"] = details
-                out["details"] = merged
-    except Exception:
-        pass
+        snap=status_snapshot() or {}; runtime=dict(dict(snap.get("state") or {}).get("backup") or {}); at=float(runtime.get("at") or 0)
+        if runtime and at and (time.time()-at)<=120:
+            level=str(runtime.get("level") or "").lower(); details=dict(runtime.get("runtime") or {})
+            if level in {"running","active","success","ok"}:
+                now=datetime.now(timezone.utc).isoformat(); running=level in {"running","active"}
+                out["status"]="RUNNING" if running else "HEALTHY"; out["lastBackupStatus"]="RUNNING" if running else "SUCCESS"; out["measuredAt"]=now
+                if not running: out["lastBackupAt"]=now; out["rpoSeconds"]=0
+                if details.get("bytes_done") is not None: out["lastBackupBytes"]=int(details.get("bytes_done") or 0)
+                if details.get("files_done") is not None: out["lastBackupFiles"]=int(details.get("files_done") or 0)
+                if details.get("target"): out["backupTarget"]=str(details.get("target"))[:40]
+                merged=dict(out.get("details") or {}); merged["runtime"]=details; out["details"]=merged
+    except Exception: pass
     return out
 
 
-def _with_storage_targets(store, payload: dict) -> dict:
-    out = dict(payload)
-    try:
-        out["storageTargets"] = collect_storage_health(store)
+def _with_storage_targets(store,payload:dict)->dict:
+    out=dict(payload)
+    try: out["storageTargets"]=collect_storage_health(store)
     except Exception:
-        now = datetime.now(timezone.utc).isoformat()
-        out["storageTargets"] = [
-            {"id": "nas_backup", "name": "NAS Backup", "kind": "nas", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
-            {"id": "hidrive_1", "name": "HiDrive 1", "kind": "hidrive", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
-            {"id": "hidrive_2", "name": "HiDrive 2", "kind": "hidrive", "status": "unknown", "latencyMs": None, "checkedAt": now, "detail": "Zielstatus konnte nicht ermittelt werden"},
-        ]
+        now=datetime.now(timezone.utc).isoformat(); out["storageTargets"]=[{"id":"nas_backup","name":"NAS Backup","kind":"nas","status":"unknown","latencyMs":None,"checkedAt":now,"detail":"Zielstatus konnte nicht ermittelt werden"},{"id":"hidrive_1","name":"HiDrive 1","kind":"hidrive","status":"unknown","latencyMs":None,"checkedAt":now,"detail":"Zielstatus konnte nicht ermittelt werden"},{"id":"hidrive_2","name":"HiDrive 2","kind":"hidrive","status":"unknown","latencyMs":None,"checkedAt":now,"detail":"Zielstatus konnte nicht ermittelt werden"}]
     return out
 
 
-def _post(store, payload: dict) -> bool:
-    cfg = dict(store.data.get("kc_communication") or {})
-    if not cfg.get("enabled"):
-        return False
-    device_id = str(cfg.get("device_id") or "")
-    token = store.get_kc_device_token() or ""
-    if not device_id or len(token) < 32:
-        return False
-    payload = dict(payload)
-    payload["deviceId"] = device_id
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        TELEMETRY_ENDPOINT,
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "User-Agent": f"PCBackupVault/{APP_VERSION}",
-            "x-pbv-device-token": token,
-        },
-    )
+def _post(store,payload:dict)->bool:
+    cfg=dict(store.data.get("kc_communication") or {})
+    if not cfg.get("enabled"): return False
+    device_id=str(cfg.get("device_id") or ""); token=store.get_kc_device_token() or ""
+    if not device_id or len(token)<32: return False
+    payload=dict(payload); payload["deviceId"]=device_id; body=json.dumps(payload,ensure_ascii=False).encode("utf-8")
+    req=urllib.request.Request(TELEMETRY_ENDPOINT,data=body,method="POST",headers={"Content-Type":"application/json; charset=utf-8","User-Agent":f"PCBackupVault/{APP_VERSION}","x-pbv-device-token":token})
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return 200 <= int(getattr(resp, "status", 200) or 200) < 300
-    except Exception:
-        return False
+        with urllib.request.urlopen(req,timeout=8) as resp: return 200<=int(getattr(resp,"status",200) or 200)<300
+    except Exception: return False
 
 
 class BackupTelemetryReporter:
-    def __init__(self, store, dsn_getter, interval_seconds: int = 60, pulse_callback=None):
-        self.store = store
-        self.dsn_getter = dsn_getter
-        self.interval = max(30, int(interval_seconds or 60))
-        self.pulse_callback = pulse_callback
-        self._wake = threading.Event()
-        self._stop = threading.Event()
-        self._unsubscribe = subscribe(self._on_status)
-        self._thread = threading.Thread(target=self._run, name="kicc-backup-telemetry", daemon=True)
-        self._thread.start()
-
-    def _on_status(self, service: str, event: str, payload: dict):
-        if str(service).lower() in {"backup", "neon", "b2", "verify", "vault", "kc"}:
-            self._wake.set()
-
-    def _pulse(self, success=None):
-        cb = self.pulse_callback
-        if not cb:
-            return
-        try:
-            cb(success)
-        except Exception:
-            pass
-
+    def __init__(self,store,dsn_getter,interval_seconds:int=60,pulse_callback=None):
+        self.store=store; self.dsn_getter=dsn_getter; self.interval=max(30,int(interval_seconds or 60)); self.pulse_callback=pulse_callback
+        self._wake=threading.Event(); self._stop=threading.Event(); self._unsubscribe=subscribe(self._on_status)
+        self._thread=threading.Thread(target=self._run,name="kicc-backup-telemetry",daemon=True); self._thread.start()
+    def _on_status(self,service:str,event:str,payload:dict):
+        if str(service).lower() in {"backup","neon","b2","verify","vault","kc"}: self._wake.set()
+    def _pulse(self,success=None):
+        if self.pulse_callback:
+            try: self.pulse_callback(success)
+            except Exception: pass
     def send_now(self):
         try:
-            dsn = self.dsn_getter()
-            if not dsn:
-                self._pulse(False)
-                return False
-            payload = _with_storage_targets(self.store, _with_runtime(_latest_snapshot(dsn)))
-            ok = _post(self.store, payload)
-            self._pulse(ok)
-            return ok
-        except Exception:
-            self._pulse(False)
-            return False
-
+            dsn=self.dsn_getter()
+            if not dsn: self._pulse(False); return False
+            ok=_post(self.store,_with_storage_targets(self.store,_with_runtime(_latest_snapshot(dsn)))); self._pulse(ok); return ok
+        except Exception: self._pulse(False); return False
     def _run(self):
         time.sleep(4)
-        while not self._stop.is_set():
-            self.send_now()
-            self._wake.clear()
-            self._wake.wait(self.interval)
-
+        while not self._stop.is_set(): self.send_now(); self._wake.clear(); self._wake.wait(self.interval)
     def stop(self):
-        self._stop.set()
-        self._wake.set()
-        try:
-            self._unsubscribe()
-        except Exception:
-            pass
+        self._stop.set(); self._wake.set()
+        try: self._unsubscribe()
+        except Exception: pass
 
 
-def start_backup_telemetry(store, dsn_getter, pulse_callback=None):
-    return BackupTelemetryReporter(store, dsn_getter, pulse_callback=pulse_callback)
+def start_backup_telemetry(store,dsn_getter,pulse_callback=None): return BackupTelemetryReporter(store,dsn_getter,pulse_callback=pulse_callback)
