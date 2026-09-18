@@ -16,11 +16,11 @@ class DualHiDriveConfigTests(unittest.TestCase):
                 {"provider_code": "STRATO_HIDRIVE", "name": "HiDrive B", "enabled": True},
             ]
         }))
-        self.assertEqual([row["id"] for row in rows], ["nas_backup", "hidrive_1", "hidrive_2"])
-        self.assertEqual(rows[1]["status"], "unknown")
+        self.assertEqual([row["id"] for row in rows], ["nas_backup", "b2_backup", "hidrive_1", "hidrive_2"])
         self.assertEqual(rows[2]["status"], "unknown")
-        self.assertEqual(rows[1]["name"], "HiDrive A")
-        self.assertEqual(rows[2]["name"], "HiDrive B")
+        self.assertEqual(rows[3]["status"], "unknown")
+        self.assertEqual(rows[2]["name"], "HiDrive A")
+        self.assertEqual(rows[3]["name"], "HiDrive B")
 
 
 if __name__ == "__main__":
