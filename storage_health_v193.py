@@ -83,6 +83,24 @@ def _hidrive_rows(store) -> list[dict]:
 
 
 
+_B2_USAGE_CACHE_TTL_SECONDS = 15 * 60
+_b2_usage_cache = {"key": None, "at": 0.0, "objectCount": None, "storedBytes": None}
+
+
+def _b2_usage(b2):
+    """Cache the expensive full-prefix listing; ping remains live every cycle."""
+    key = (str(getattr(b2, "bucket", "")), str(getattr(b2, "prefix", "")))
+    now = time.monotonic()
+    if (_b2_usage_cache["key"] == key
+            and now - float(_b2_usage_cache["at"] or 0) < _B2_USAGE_CACHE_TTL_SECONDS):
+        return _b2_usage_cache["objectCount"], _b2_usage_cache["storedBytes"], True
+    sizes = b2.list_prefix_sizes()
+    count = len(sizes)
+    stored = sum(int(v or 0) for v in sizes.values())
+    _b2_usage_cache.update(key=key, at=now, objectCount=count, storedBytes=stored)
+    return count, stored, False
+
+
 def _b2_row(store) -> dict:
     checked_at = _now_iso()
     try:
@@ -106,11 +124,10 @@ def _b2_row(store) -> dict:
     latency = int((time.monotonic() - started) * 1000)
     object_count = None
     stored_bytes = None
+    usage_cached = None
     if ok:
         try:
-            sizes = b2.list_prefix_sizes()
-            object_count = len(sizes)
-            stored_bytes = sum(int(v or 0) for v in sizes.values())
+            object_count, stored_bytes, usage_cached = _b2_usage(b2)
         except Exception:
             # Reachability remains a separate signal; usage is optional and
             # must never turn a successful read-only ping into a false outage.
@@ -125,6 +142,8 @@ def _b2_row(store) -> dict:
         "detail": "B2-Ziel erreichbar" if ok else "B2-Ziel nicht erreichbar",
         "objectCount": object_count,
         "storedBytes": stored_bytes,
+        "usageCached": usage_cached,
+        "usageCacheTtlSeconds": _B2_USAGE_CACHE_TTL_SECONDS,
     }
 
 
