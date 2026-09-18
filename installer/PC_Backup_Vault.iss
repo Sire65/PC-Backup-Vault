@@ -1,5 +1,5 @@
 #define MyAppName "PC Backup Vault"
-#define MyAppVersion "1.9.34"
+#define MyAppVersion "1.9.35"
 #define MyAppPublisher "KC"
 #define MyAppExeName "PC_Backup_Vault.exe"
 
