@@ -15,7 +15,7 @@ class BackupTelemetryByteMappingTests(unittest.TestCase):
              patch.object(telemetry, "recent_restore_tests", return_value=[]):
             out = telemetry._latest_snapshot("unused")
         self.assertEqual(out["lastBackupBytes"], 123456)
-        self.assertNotEqual(out["lastBackupBytes"], 65432)
+        self.assertNotEqual(out["lastBackupBytes"], 65432)\n        self.assertEqual(out["lastBackupStoredBytes"], 65432)
 
 if __name__ == "__main__":
     unittest.main()
