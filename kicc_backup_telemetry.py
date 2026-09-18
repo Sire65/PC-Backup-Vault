@@ -72,7 +72,7 @@ def _latest_snapshot(dsn: str) -> dict:
         "measuredAt": datetime.now(timezone.utc).isoformat(),
         "lastBackupAt": last_backup_at,
         "lastBackupStatus": backup_status,
-        "lastBackupBytes": int(job[5] or 0) if job and len(job) > 5 else None,
+        "lastBackupBytes": int(job[5] or 0) if job and len(job) > 5 else None,\n        "lastBackupStoredBytes": int(job[6] or 0) if job and len(job) > 6 else None,
         "lastBackupFiles": int(job[4] or 0) if job and len(job) > 4 else None,
         "backupTarget": str(job[15] or "")[:40] if job and len(job) > 15 else None,
         "lastVerifyAt": _iso(verify[4] if verify and len(verify) > 4 else None),
