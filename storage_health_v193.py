@@ -104,6 +104,17 @@ def _b2_row(store) -> dict:
     started = time.monotonic()
     ok, _detail = b2.ping()
     latency = int((time.monotonic() - started) * 1000)
+    object_count = None
+    stored_bytes = None
+    if ok:
+        try:
+            sizes = b2.list_prefix_sizes()
+            object_count = len(sizes)
+            stored_bytes = sum(int(v or 0) for v in sizes.values())
+        except Exception:
+            # Reachability remains a separate signal; usage is optional and
+            # must never turn a successful read-only ping into a false outage.
+            pass
     return {
         "id": "b2_backup",
         "name": "Backblaze B2",
@@ -112,6 +123,8 @@ def _b2_row(store) -> dict:
         "latencyMs": latency,
         "checkedAt": _now_iso(),
         "detail": "B2-Ziel erreichbar" if ok else "B2-Ziel nicht erreichbar",
+        "objectCount": object_count,
+        "storedBytes": stored_bytes,
     }
 
 
