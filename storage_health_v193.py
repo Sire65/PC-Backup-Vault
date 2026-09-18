@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import time
+
+from object_store import make_b2_store
 from datetime import datetime, timezone
 
 
@@ -80,6 +82,39 @@ def _hidrive_rows(store) -> list[dict]:
     return rows
 
 
+
+def _b2_row(store) -> dict:
+    checked_at = _now_iso()
+    try:
+        config = store.get_b2_runtime_config()
+        b2 = make_b2_store(config)
+    except Exception:
+        b2 = None
+    if b2 is None:
+        return {
+            "id": "b2_backup",
+            "name": "Backblaze B2",
+            "kind": "b2",
+            "status": "not_configured",
+            "latencyMs": None,
+            "checkedAt": checked_at,
+            "detail": "B2-Ziel nicht vollständig konfiguriert",
+        }
+
+    started = time.monotonic()
+    ok, _detail = b2.ping()
+    latency = int((time.monotonic() - started) * 1000)
+    return {
+        "id": "b2_backup",
+        "name": "Backblaze B2",
+        "kind": "b2",
+        "status": "healthy" if ok else "critical",
+        "latencyMs": latency,
+        "checkedAt": _now_iso(),
+        "detail": "B2-Ziel erreichbar" if ok else "B2-Ziel nicht erreichbar",
+    }
+
+
 def collect_storage_health(store) -> list[dict]:
     """Return read-only, privacy-safe storage health for KC System Check.
 
@@ -88,4 +123,4 @@ def collect_storage_health(store) -> list[dict]:
     state for two HiDrive slots without exposing credentials, usernames,
     endpoints, roots or local/UNC paths.
     """
-    return [_nas_row(store), *_hidrive_rows(store)]
+    return [_nas_row(store), _b2_row(store), *_hidrive_rows(store)]
