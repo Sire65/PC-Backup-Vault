@@ -84,7 +84,7 @@ def _hidrive_rows(store) -> list[dict]:
 
 
 _B2_USAGE_CACHE_TTL_SECONDS = 15 * 60
-_b2_usage_cache = {"key": None, "at": 0.0, "objectCount": None, "storedBytes": None}
+_b2_usage_cache = {"key": None, "at": 0.0, "objectCount": None, "storedBytes": None, "newestObjectAt": None}
 
 
 def _b2_usage(b2):
@@ -93,12 +93,13 @@ def _b2_usage(b2):
     now = time.monotonic()
     if (_b2_usage_cache["key"] == key
             and now - float(_b2_usage_cache["at"] or 0) < _B2_USAGE_CACHE_TTL_SECONDS):
-        return _b2_usage_cache["objectCount"], _b2_usage_cache["storedBytes"], True
-    sizes = b2.list_prefix_sizes()
-    count = len(sizes)
-    stored = sum(int(v or 0) for v in sizes.values())
-    _b2_usage_cache.update(key=key, at=now, objectCount=count, storedBytes=stored)
-    return count, stored, False
+        return _b2_usage_cache["objectCount"], _b2_usage_cache["storedBytes"], _b2_usage_cache["newestObjectAt"], True
+    overview = b2.prefix_overview()
+    count = int(overview.get("objectCount") or 0)
+    stored = int(overview.get("storedBytes") or 0)
+    newest = overview.get("newestObjectAt")
+    _b2_usage_cache.update(key=key, at=now, objectCount=count, storedBytes=stored, newestObjectAt=newest)
+    return count, stored, newest, False
 
 
 def _b2_row(store) -> dict:
@@ -125,9 +126,10 @@ def _b2_row(store) -> dict:
     object_count = None
     stored_bytes = None
     usage_cached = None
+    newest_object_at = None
     if ok:
         try:
-            object_count, stored_bytes, usage_cached = _b2_usage(b2)
+            object_count, stored_bytes, newest_object_at, usage_cached = _b2_usage(b2)
         except Exception:
             # Reachability remains a separate signal; usage is optional and
             # must never turn a successful read-only ping into a false outage.
@@ -142,6 +144,7 @@ def _b2_row(store) -> dict:
         "detail": "B2-Ziel erreichbar" if ok else "B2-Ziel nicht erreichbar",
         "objectCount": object_count,
         "storedBytes": stored_bytes,
+        "newestObjectAt": newest_object_at,
         "usageCached": usage_cached,
         "usageCacheTtlSeconds": _B2_USAGE_CACHE_TTL_SECONDS,
     }
