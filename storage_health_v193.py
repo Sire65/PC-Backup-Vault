@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import time
+import json
+import urllib.request
+import urllib.error
 
 from object_store import make_b2_store
 from datetime import datetime, timezone
@@ -167,16 +170,37 @@ def _kc_archive_db_row(store) -> dict:
             "provider": provider,
         }
     # Credentials/DSNs are deliberately never emitted by storage telemetry.
-    return {
-        "id": "kc_archive_db",
-        "name": "KC Archiv-Datenbank",
-        "kind": "database_archive",
-        "status": "unknown",
-        "latencyMs": None,
-        "checkedAt": _now_iso(),
-        "detail": "Konfiguriert; aktive Nur-Lese-Pruefung wird erst nach Zugangsdaten freigegeben",
-        "provider": provider,
-    }
+    base_url = str(cfg.get("gateway_url") or "").strip().rstrip("/")
+    token = str(cfg.get("gateway_token") or "").strip()
+    if not base_url or not token:
+        return {
+            "id": "kc_archive_db", "name": "KC Archiv-Datenbank", "kind": "database_archive",
+            "status": "unknown", "latencyMs": None, "checkedAt": _now_iso(),
+            "detail": "Konfiguriert; Gateway-Adresse oder Token fehlt", "provider": provider,
+        }
+    started = time.monotonic()
+    try:
+        req = urllib.request.Request(base_url + "/v1/stats", headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            body = json.loads(response.read(32768).decode("utf-8"))
+        latency = int((time.monotonic() - started) * 1000)
+        if not body.get("ok"):
+            raise RuntimeError("gateway not ok")
+        return {
+            "id": "kc_archive_db", "name": "KC Archiv-Datenbank", "kind": "database_archive",
+            "status": "healthy", "latencyMs": latency, "checkedAt": _now_iso(),
+            "detail": "Archiv-Gateway und Datenbank erreichbar", "provider": provider,
+            "archivePackages": int(body.get("packages") or 0),
+            "storedBytes": int(body.get("bytes") or 0),
+            "newestArchiveAt": body.get("newest"),
+        }
+    except Exception:
+        return {
+            "id": "kc_archive_db", "name": "KC Archiv-Datenbank", "kind": "database_archive",
+            "status": "critical", "latencyMs": int((time.monotonic() - started) * 1000),
+            "checkedAt": _now_iso(), "detail": "Archiv-Gateway nicht erreichbar",
+            "provider": provider,
+        }
 
 
 def collect_storage_health(store) -> list[dict]:
