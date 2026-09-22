@@ -123,7 +123,7 @@ def _with_runtime(payload: dict) -> dict:
 def _with_storage_targets(store, payload: dict) -> dict:
     out = dict(payload)
     try:
-        out["storageTargets"] = collect_storage_health(store)
+        targets = collect_storage_health(store)\n        out["storageTargets"] = targets\n        b2 = next((x for x in targets if x.get("id") == "b2_backup"), None)\n        if b2:\n            out["b2Overview"] = {k: b2.get(k) for k in ("objectCount", "storedBytes", "newestObjectAt", "usageCached")}
     except Exception:
         now = datetime.now(timezone.utc).isoformat()
         out["storageTargets"] = [
