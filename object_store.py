@@ -131,6 +131,36 @@ class B2Store:
         except Exception as e:
             raise ObjectStoreError(f"B2-Objektliste fehlgeschlagen: {e}") from e
 
+    def prefix_overview(self) -> dict:
+        """Read-only B2 overview for monitoring: count, bytes and newest object timestamp."""
+        try:
+            client = self._client()
+            prefix = (self.prefix or "pc-backup-vault").strip("/") + "/"
+            token = None
+            count = 0
+            stored = 0
+            newest = None
+            while True:
+                kwargs = {"Bucket": self.bucket, "Prefix": prefix, "MaxKeys": 1000}
+                if token:
+                    kwargs["ContinuationToken"] = token
+                activity("b2", "list", prefix)
+                response = client.list_objects_v2(**kwargs)
+                for item in response.get("Contents", []) or []:
+                    count += 1
+                    stored += int(item.get("Size") or 0)
+                    modified = item.get("LastModified")
+                    if modified is not None and (newest is None or modified > newest):
+                        newest = modified
+                if not response.get("IsTruncated"):
+                    break
+                token = response.get("NextContinuationToken")
+                if not token:
+                    break
+            return {"objectCount": count, "storedBytes": stored, "newestObjectAt": newest.isoformat() if newest else None}
+        except Exception as e:
+            raise ObjectStoreError(f"B2-Uebersicht fehlgeschlagen: {e}") from e
+
     def head(self, key: str) -> dict:
         try:
             activity("b2", "head", key)
