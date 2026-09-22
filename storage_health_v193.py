@@ -150,6 +150,35 @@ def _b2_row(store) -> dict:
     }
 
 
+def _kc_archive_db_row(store) -> dict:
+    """Prepared archive-database slot. No network call until explicitly configured."""
+    cfg = dict(store.data.get("kc_archive_database") or {})
+    enabled = bool(cfg.get("enabled"))
+    provider = str(cfg.get("provider") or "pending").strip().lower()
+    if not enabled:
+        return {
+            "id": "kc_archive_db",
+            "name": "KC Archiv-Datenbank",
+            "kind": "database_archive",
+            "status": "not_configured",
+            "latencyMs": None,
+            "checkedAt": _now_iso(),
+            "detail": "Vorbereitet; Anbieter/Zugang noch nicht freigegeben",
+            "provider": provider,
+        }
+    # Credentials/DSNs are deliberately never emitted by storage telemetry.
+    return {
+        "id": "kc_archive_db",
+        "name": "KC Archiv-Datenbank",
+        "kind": "database_archive",
+        "status": "unknown",
+        "latencyMs": None,
+        "checkedAt": _now_iso(),
+        "detail": "Konfiguriert; aktive Nur-Lese-Pruefung wird erst nach Zugangsdaten freigegeben",
+        "provider": provider,
+    }
+
+
 def collect_storage_health(store) -> list[dict]:
     """Return read-only, privacy-safe storage health for KC System Check.
 
@@ -158,4 +187,4 @@ def collect_storage_health(store) -> list[dict]:
     state for two HiDrive slots without exposing credentials, usernames,
     endpoints, roots or local/UNC paths.
     """
-    return [_nas_row(store), _b2_row(store), *_hidrive_rows(store)]
+    return [_nas_row(store), _b2_row(store), _kc_archive_db_row(store), *_hidrive_rows(store)]
