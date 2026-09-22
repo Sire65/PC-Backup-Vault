@@ -3,8 +3,8 @@ CREATE SCHEMA IF NOT EXISTS backup_vault;
 CREATE TABLE IF NOT EXISTS backup_vault.core (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   product_name text NOT NULL DEFAULT 'PC Backup Vault',
-  schema_version text NOT NULL DEFAULT '1.7.0',
-  app_min_version text NOT NULL DEFAULT '1.7.0',
+  schema_version text NOT NULL DEFAULT '1.8.0',
+  app_min_version text NOT NULL DEFAULT '1.8.0',
   environment text NOT NULL DEFAULT 'backup-only',
   isolation_rule text NOT NULL DEFAULT 'NO_KC_MIRRORING_NO_KC_TABLES_NO_SHARED_CREDENTIALS',
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -50,8 +50,11 @@ BEGIN
   END IF;
 END $$;
 
-INSERT INTO backup_vault.core (id,schema_version,app_min_version) VALUES (1,'1.7.0','1.7.0')
-ON CONFLICT (id) DO UPDATE SET schema_version='1.7.0',app_min_version='1.7.0',updated_at=now();
+INSERT INTO backup_vault.core (id,schema_version,app_min_version) VALUES (1,'1.8.0','1.8.0')
+ON CONFLICT (id) DO UPDATE SET
+  schema_version=CASE WHEN string_to_array(backup_vault.core.schema_version,'.')::int[] < ARRAY[1,8,0] THEN '1.8.0' ELSE backup_vault.core.schema_version END,
+  app_min_version=CASE WHEN string_to_array(backup_vault.core.app_min_version,'.')::int[] < ARRAY[1,8,0] THEN '1.8.0' ELSE backup_vault.core.app_min_version END,
+  updated_at=now();
 
 CREATE TABLE IF NOT EXISTS backup_vault.storage_targets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
