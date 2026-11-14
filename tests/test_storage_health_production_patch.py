@@ -11,13 +11,12 @@ class Store:
 
 
 class StorageHealthProductionPatchTests(unittest.TestCase):
-    def test_always_returns_four_expected_slots(self):
+    def test_always_returns_expected_slots(self):
+        # Seit dem vorbereiteten Archiv-Datenbank-Platz (kc_archive_db) fuenf feste Plaetze.
         rows = collect_storage_health(Store())
-        self.assertEqual([row["id"] for row in rows], ["nas_backup", "b2_backup", "hidrive_1", "hidrive_2"])
-        self.assertEqual(rows[0]["status"], "not_configured")
-        self.assertEqual(rows[1]["status"], "not_configured")
-        self.assertEqual(rows[2]["status"], "not_configured")
-        self.assertEqual(rows[3]["status"], "not_configured")
+        self.assertEqual([row["id"] for row in rows], ["nas_backup", "b2_backup", "kc_archive_db", "hidrive_1", "hidrive_2"])
+        for row in rows:
+            self.assertEqual(row["status"], "not_configured", row["id"])
 
     def test_reachable_nas_is_healthy_without_exposing_path(self):
         with tempfile.TemporaryDirectory() as target:
@@ -33,8 +32,9 @@ class StorageHealthProductionPatchTests(unittest.TestCase):
                 {"provider_code": "STRATO_HIDRIVE", "name": "HiDrive A", "enabled": True},
             ],
         }))
-        self.assertEqual(rows[2]["status"], "unknown")
-        self.assertEqual(rows[3]["status"], "not_configured")
+        by_id = {row["id"]: row for row in rows}
+        self.assertEqual(by_id["hidrive_1"]["status"], "unknown")
+        self.assertEqual(by_id["hidrive_2"]["status"], "not_configured")
 
     def test_sensitive_values_are_not_emitted(self):
         secret_path = r"C:\\private\\backup"
